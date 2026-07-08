@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useMemo } from 'react';
 
 const AximContext = createContext();
 
@@ -9,23 +9,17 @@ export const AximProvider = ({ children }) => {
     { id: 1, name: 'Home Base', radius: '500m', active: true },
     { id: 2, name: 'Work HQ', radius: '200m', active: false }
   ]);
-  const [activeSpotters, setActiveSpotters] = useState(8492);
+  const [activeSpotters, setActiveSpotters] = useState(0);
 
-  // Simulate fluctuating spotter count
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveSpotters(prev => prev + Math.floor(Math.random() * 5) - 2);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  const contextValue = useMemo(() => ({
+    isLive, setIsLive,
+    privacyMode, setPrivacyMode,
+    safeZones, setSafeZones,
+    activeSpotters, setActiveSpotters
+  }), [isLive, privacyMode, safeZones, activeSpotters]);
 
   return (
-    <AximContext.Provider value={{
-      isLive, setIsLive,
-      privacyMode, setPrivacyMode,
-      safeZones, setSafeZones,
-      activeSpotters
-    }}>
+    <AximContext.Provider value={contextValue}>
       {children}
     </AximContext.Provider>
   );
