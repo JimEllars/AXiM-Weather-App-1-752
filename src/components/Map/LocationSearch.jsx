@@ -19,8 +19,21 @@ const LocationSearch = ({ onLocationSelect }) => {
     loc.name.toLowerCase().includes(query.toLowerCase())
   );
 
+  const stopPropagation = (e) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 w-full max-w-md px-4 z-20">
+    <div
+      className="absolute top-4 left-1/2 -translate-x-1/2 w-full max-w-md px-4 z-20"
+      onMouseDown={stopPropagation}
+      onMouseUp={stopPropagation}
+      onClick={stopPropagation}
+      onDoubleClick={stopPropagation}
+      onWheel={stopPropagation}
+      onTouchStart={stopPropagation}
+      onTouchMove={stopPropagation}
+    >
       <div className="relative">
         <div className={`glass-panel flex items-center px-4 py-2 transition-all ${isFocused ? 'ring-2 ring-axim-accent/50' : ''}`}>
           <SafeIcon icon={FiIcons.FiSearch} className="text-slate-400 mr-3" />

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import SafeIcon from '../../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 import { supabase } from '../../lib/supabase';
+import { useNavigate } from 'react-router-dom';
 
 const PIPELINE_STEPS = [
   { id: 'ingest', label: 'Ingest & Metadata Strip', icon: FiIcons.FiShield },
@@ -14,6 +15,7 @@ const PIPELINE_STEPS = [
 const OnyxPipeline = ({ isProcessing, onComplete }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!isProcessing) return;
@@ -37,11 +39,23 @@ const OnyxPipeline = ({ isProcessing, onComplete }) => {
       }, 800);
 
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+
         const { data, error } = await supabase.functions.invoke('onyx-pipeline', {
-          body: { mediaUrl: 'uploaded-file-url-placeholder' }
+          body: { mediaUrl: 'uploaded-file-url-placeholder' },
+          headers: session?.access_token ? {
+            Authorization: `Bearer ${session.access_token}`
+          } : undefined
         });
 
         clearInterval(interval);
+
+        // Handle 401 Unauthorized explicitly
+        if (error && error.context?.status === 401) {
+          navigate('/login');
+          return;
+        }
+
         // Mark all steps complete
         setCompletedSteps(PIPELINE_STEPS.map(s => s.id));
         setActiveStep(PIPELINE_STEPS.length);
@@ -59,6 +73,12 @@ const OnyxPipeline = ({ isProcessing, onComplete }) => {
 
       } catch (err) {
         clearInterval(interval);
+
+        if (err.status === 401 || err.message?.includes('Unauthorized')) {
+          navigate('/login');
+          return;
+        }
+
         setCompletedSteps(PIPELINE_STEPS.map(s => s.id));
         setActiveStep(PIPELINE_STEPS.length);
 
@@ -74,7 +94,7 @@ const OnyxPipeline = ({ isProcessing, onComplete }) => {
 
     runPipeline();
 
-  }, [isProcessing, onComplete]);
+  }, [isProcessing, onComplete, navigate]);
 
   return (
     <div className="w-full space-y-4">

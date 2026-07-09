@@ -14,6 +14,10 @@ const FORECAST_DATA = [
 const LocalForecastPanel = ({ locationName }) => {
   const [isVisible, setIsVisible] = useState(true);
 
+  const stopPropagation = (e) => {
+    e.stopPropagation();
+  };
+
   return (
     <AnimatePresence>
       {isVisible && (
@@ -24,7 +28,16 @@ const LocalForecastPanel = ({ locationName }) => {
           transition={{ duration: 0.3 }}
           className="absolute bottom-32 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-20 pointer-events-none"
         >
-          <div className="glass-panel p-4 pointer-events-auto shadow-2xl relative">
+          <div
+            className="glass-panel p-4 pointer-events-auto shadow-2xl relative"
+            onMouseDown={stopPropagation}
+            onMouseUp={stopPropagation}
+            onClick={stopPropagation}
+            onDoubleClick={stopPropagation}
+            onWheel={stopPropagation}
+            onTouchStart={stopPropagation}
+            onTouchMove={stopPropagation}
+          >
             <button
               onClick={() => setIsVisible(false)}
               className="absolute top-2 right-2 text-slate-500 hover:text-white transition-colors"
