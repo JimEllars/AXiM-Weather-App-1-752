@@ -12,8 +12,42 @@ const SubmitPage = () => {
   const handleUpload = (e) => {
     const selected = e.target.files[0];
     if (selected) {
-      setFile(URL.createObjectURL(selected));
-      simulateUpload();
+      if (selected.type.startsWith('image/')) {
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+
+          if (width > 1920 || height > 1920) {
+            if (width > height) {
+              height *= 1920 / width;
+              width = 1920;
+            } else {
+              width *= 1920 / height;
+              height = 1920;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob((blob) => {
+              const resizedUrl = URL.createObjectURL(blob);
+              setFile(resizedUrl);
+              simulateUpload();
+            }, selected.type);
+          } else {
+            setFile(URL.createObjectURL(selected));
+            simulateUpload();
+          }
+        };
+        img.src = URL.createObjectURL(selected);
+      } else {
+        setFile(URL.createObjectURL(selected));
+        simulateUpload();
+      }
     }
   };
 

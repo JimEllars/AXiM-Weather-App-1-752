@@ -1,7 +1,36 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Source, Layer } from 'react-map-gl/maplibre';
 
 const RadarOverlay = ({ isVisible, opacity = 0.6 }) => {
+  const [frames, setFrames] = useState([]);
+
+  // Preload images in the background
+  useEffect(() => {
+    const fetchRadar = async () => {
+      try {
+        // We simulate calling the edge API endpoint
+        const response = await fetch('/api/weather');
+        if (response.ok) {
+          const data = await response.json();
+          setFrames(data.frames);
+
+          // Background Image Preloader pool
+          data.frames.slice(0, 3).forEach(frame => {
+             const img = new Image();
+             img.src = frame.url;
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch radar frames:", err);
+      }
+    };
+
+    // Call only if visible
+    if(isVisible) {
+      fetchRadar();
+    }
+  }, [isVisible]);
+
   if (!isVisible) return null;
 
   // Mock radar data using a large circular area with "blobs"
