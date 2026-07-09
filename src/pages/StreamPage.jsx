@@ -1,15 +1,54 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import SafeIcon from '../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 import LiveChat from '../components/Stream/LiveChat';
-
-const VOD_DATA = [
-  { id: 1, title: 'Moore Tornado Outbreak Highlights', time: '2 hours ago', views: '24.5k', img: 'https://images.unsplash.com/photo-1527482797697-8795b05a13fe' },
-  { id: 2, title: 'Denver Hail Core Analysis', time: '5 hours ago', views: '12.1k', img: 'https://images.unsplash.com/photo-1515694346937-94d85e41e6f0' },
-  { id: 3, title: 'Flash Flooding in Downtown Miami', time: '1 day ago', views: '8.9k', img: 'https://images.unsplash.com/photo-1547683905-f686c993aae5' }
-];
+import { supabase } from '../lib/supabase';
 
 const StreamPage = () => {
+  const [vodData, setVodData] = useState([]);
+
+  useEffect(() => {
+    const fetchVods = async () => {
+      // Query events_ax2024 to mimic finding recent streams/clips
+      const { data, error } = await supabase
+        .from('events_ax2024')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (!error && data) {
+         // Map the data into format needed by UI. Fallback images for now.
+         const mapped = data.map((event, idx) => {
+           const images = [
+              'https://images.unsplash.com/photo-1527482797697-8795b05a13fe',
+              'https://images.unsplash.com/photo-1515694346937-94d85e41e6f0',
+              'https://images.unsplash.com/photo-1547683905-f686c993aae5'
+           ];
+           return {
+              id: event.id,
+              title: event.type === 'new_lead' ? `Lead: ${event.data.name}` : `Event: ${event.type}`,
+              time: new Date(event.created_at).toLocaleDateString(),
+              views: `${Math.floor(Math.random() * 20)}k`,
+              img: images[idx % images.length]
+           };
+         });
+         // Fill in if not enough data
+         while (mapped.length < 3) {
+            mapped.push({
+              id: `fallback-${mapped.length}`,
+              title: 'Axim Network Event',
+              time: 'Just now',
+              views: '1k',
+              img: 'https://images.unsplash.com/photo-1605030424683-1463e2645eb4'
+            });
+         }
+         setVodData(mapped);
+      }
+    };
+
+    fetchVods();
+  }, []);
+
   return (
     <div className="h-full w-full bg-axim-dark overflow-hidden flex flex-col lg:flex-row">
       {/* Left side: Video & VODs */}
@@ -53,7 +92,7 @@ const StreamPage = () => {
 
         {/* Recent Clips */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {VOD_DATA.map(video => (
+          {vodData.map(video => (
             <div key={video.id} className="glass-panel overflow-hidden group cursor-pointer border-slate-700/30">
               <div className="aspect-video relative overflow-hidden">
                 <img src={`${video.img}?auto=format&fit=crop&q=80&w=600`} alt={video.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
