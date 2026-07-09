@@ -24,6 +24,8 @@ const MapPage = () => {
   const frameCountRef = useRef(0);
   const lastTimeRef = useRef(performance.now());
   const pointsRef = useRef({});
+  // This state could represent the currently visible geohash based on map center/zoom
+  const [activeGeohash, setActiveGeohash] = useState('9v6');
 
   // FPS Tracking for map rendering
   useEffect(() => {
@@ -51,7 +53,10 @@ const MapPage = () => {
 
   // WebSocket Subscription
   useEffect(() => {
-    const channel = supabase.channel('spatial:tracking');
+    // Incorporate geohash into channel for more granular updates if backend supports it
+    // Or just use the active geohash for the REST hydration filter.
+    const channelName = `spatial:tracking:${activeGeohash}`;
+    const channel = supabase.channel(channelName);
     const startTime = Date.now();
 
     const generateGeoJson = () => {
@@ -94,32 +99,57 @@ const MapPage = () => {
       } else {
         updatePointsState();
       }
-    }).subscribe((status) => {
+    }).subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         const latency = Date.now() - startTime;
         logTelemetry('websocket_connected', { latency });
         console.log(`WebSocket connected in ${latency}ms`);
+
+        // Hydrate active spotters for current geohash via REST
+        try {
+          // Clear current points before hydrating new region
+          pointsRef.current = {};
+
+          const { data, error } = await supabase
+            .from('active_spotters')
+            .select('*')
+            .eq('geohash', activeGeohash);
+
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            data.forEach(p => { pointsRef.current[p.id] = p; });
+            const mapboxSource = mapRef.current?.getSource('spotters');
+            if (mapboxSource) {
+              const geoJson = generateGeoJson();
+              mapboxSource.setData(geoJson);
+              setActiveSpotters(geoJson.features.length);
+            } else {
+              updatePointsState();
+            }
+          } else {
+            // Even if no data, ensure we clear the old data from the map
+            const mapboxSource = mapRef.current?.getSource('spotters');
+            if (mapboxSource) {
+              mapboxSource.setData(generateGeoJson());
+              setActiveSpotters(0);
+            } else {
+              updatePointsState();
+            }
+          }
+        } catch (err) {
+          console.error("Failed to hydrate spotters:", err);
+          logTelemetry('hydration_error', { error: err.message });
+        }
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
         logTelemetry('websocket_error', { status });
       }
     });
 
-    // Mock initial data if no broadcast is sent yet (to show something)
-    const initialPoints = Array.from({ length: 500 }).map((_, i) => ({
-      id: `spotter-init-${i}`,
-      lng: -96.797 + (Math.random() - 0.5) * 20,
-      lat: 32.776 + (Math.random() - 0.5) * 20,
-      status: Math.random() > 0.9 ? 'live' : 'active',
-      heading: Math.random() * 360
-    }));
-
-    initialPoints.forEach(p => { pointsRef.current[p.id] = p; });
-    updatePointsState();
-
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [setActiveSpotters]);
+  }, [setActiveSpotters, activeGeohash]);
 
   const geoJsonData = useMemo(() => ({
     type: 'FeatureCollection',
@@ -202,6 +232,8 @@ const MapPage = () => {
         duration: 2000
       });
     }
+    // Dummy update geohash for demonstration
+    setActiveGeohash('9v' + Math.floor(Math.random() * 10));
   };
 
   return (
