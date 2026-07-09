@@ -6,6 +6,8 @@ import MapControls from '../components/Map/MapControls';
 import RadarScrubber from '../components/Radar/RadarScrubber';
 import WeatherLegend from '../components/Radar/WeatherLegend';
 import RadarOverlay from '../components/Radar/RadarOverlay';
+import LocationSearch from '../components/Map/LocationSearch';
+import LocalForecastPanel from '../components/Weather/LocalForecastPanel';
 import { logTelemetry } from '../utils/telemetry';
 
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
@@ -13,9 +15,11 @@ const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.j
 const MapPage = () => {
   const mapRef = useRef();
   const { setActiveSpotters } = useAxim();
+  // We keep points state only for initial load, but for high-frequency updates, we bypass React state.
   const [points, setPoints] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [layers, setLayers] = useState({ radar: true, velocity: false, spotters: true });
+  const [selectedLocation, setSelectedLocation] = useState(null);
 
   const frameCountRef = useRef(0);
   const lastTimeRef = useRef(performance.now());
@@ -50,8 +54,8 @@ const MapPage = () => {
     const channel = supabase.channel('spatial:tracking');
     const startTime = Date.now();
 
-    const updatePoints = () => {
-      const newPoints = Object.values(pointsRef.current).map(spotter => ({
+    const generateGeoJson = () => {
+      const features = Object.values(pointsRef.current).map(spotter => ({
         type: 'Feature',
         properties: {
           spotterId: spotter.id,
@@ -63,14 +67,33 @@ const MapPage = () => {
           coordinates: [spotter.lng, spotter.lat]
         }
       }));
-      setPoints(newPoints);
-      setActiveSpotters(newPoints.length);
+
+      return {
+        type: 'FeatureCollection',
+        features
+      };
+    };
+
+    // Fallback update for React state in case the map isn't loaded yet.
+    const updatePointsState = () => {
+      const geoJson = generateGeoJson();
+      setPoints(geoJson.features);
+      setActiveSpotters(geoJson.features.length);
     };
 
     channel.on('broadcast', { event: 'location_update' }, (payload) => {
       const p = payload.payload;
       pointsRef.current[p.id] = p;
-      updatePoints();
+
+      const mapboxSource = mapRef.current?.getSource('spotters');
+      if (mapboxSource) {
+        // Direct MapLibre Source update, bypass React render cycle
+        const geoJson = generateGeoJson();
+        mapboxSource.setData(geoJson);
+        setActiveSpotters(geoJson.features.length);
+      } else {
+        updatePointsState();
+      }
     }).subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         const latency = Date.now() - startTime;
@@ -91,7 +114,7 @@ const MapPage = () => {
     }));
 
     initialPoints.forEach(p => { pointsRef.current[p.id] = p; });
-    updatePoints();
+    updatePointsState();
 
     return () => {
       supabase.removeChannel(channel);
@@ -169,8 +192,22 @@ const MapPage = () => {
     }
   };
 
+  const handleLocationSelect = (loc) => {
+    setSelectedLocation(loc.name);
+    if (mapRef.current) {
+      mapRef.current.flyTo({
+        center: [loc.lng, loc.lat],
+        zoom: 10,
+        essential: true,
+        duration: 2000
+      });
+    }
+  };
+
   return (
     <div className="w-full h-full relative bg-axim-dark">
+      <LocationSearch onLocationSelect={handleLocationSelect} />
+
       <Map
         ref={mapRef}
         initialViewState={{ longitude: -96.797, latitude: 32.776, zoom: 4 }}
@@ -200,6 +237,8 @@ const MapPage = () => {
 
       <MapControls layers={layers} setLayers={setLayers} activeSpotters={points.length} />
       
+      <LocalForecastPanel locationName={selectedLocation} />
+
       <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-full px-4 flex flex-col items-center gap-4 z-10 pointer-events-none">
         <div className="pointer-events-auto flex flex-col items-center gap-2 w-full max-w-lg">
           <WeatherLegend />
