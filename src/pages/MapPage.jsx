@@ -26,6 +26,24 @@ const MapPage = () => {
   const pointsRef = useRef({});
   // This state could represent the currently visible geohash based on map center/zoom
   const [activeGeohash, setActiveGeohash] = useState('9v6');
+  const [wsStatus, setWsStatus] = useState('CONNECTING'); // CONNECTING, CONNECTED, RECONNECTING, ERROR
+  const [retrySeconds, setRetrySeconds] = useState(0);
+
+  const debounceTimeout = useRef(null);
+
+  const handleMoveEnd = useCallback(() => {
+    if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+    debounceTimeout.current = setTimeout(() => {
+      if (mapRef.current) {
+        const center = mapRef.current.getCenter();
+        const newGeohash = `9v${Math.abs(Math.floor(center.lat))}${Math.abs(Math.floor(center.lng))}`.substring(0, 6);
+        if (newGeohash !== activeGeohash) {
+          setActiveGeohash(newGeohash);
+        }
+      }
+    }, 350);
+  }, [activeGeohash]);
+
 
   // FPS Tracking for map rendering
   useEffect(() => {
@@ -51,13 +69,14 @@ const MapPage = () => {
     return () => cancelAnimationFrame(animationFrameId);
   }, []);
 
-  // WebSocket Subscription
+  // WebSocket Subscription with Exponential Backoff
   useEffect(() => {
-    // Incorporate geohash into channel for more granular updates if backend supports it
-    // Or just use the active geohash for the REST hydration filter.
-    const channelName = `spatial:tracking:${activeGeohash}`;
-    const channel = supabase.channel(channelName);
-    const startTime = Date.now();
+    let retryAttempt = 0;
+    const maxRetryDelay = 30000; // 30 seconds
+    const baseDelay = 1000; // 1 second
+    let channel;
+    let reconnectTimeout;
+    let uiCountdownInterval;
 
     const generateGeoJson = () => {
       const features = Object.values(pointsRef.current).map(spotter => ({
@@ -79,75 +98,108 @@ const MapPage = () => {
       };
     };
 
-    // Fallback update for React state in case the map isn't loaded yet.
     const updatePointsState = () => {
       const geoJson = generateGeoJson();
       setPoints(geoJson.features);
       setActiveSpotters(geoJson.features.length);
     };
 
-    channel.on('broadcast', { event: 'location_update' }, (payload) => {
-      const p = payload.payload;
-      pointsRef.current[p.id] = p;
+    const connectChannel = () => {
+      setWsStatus(retryAttempt === 0 ? 'CONNECTING' : 'RECONNECTING');
+      const channelName = `spatial:tracking:${activeGeohash}`;
+      channel = supabase.channel(channelName);
+      const startTime = Date.now();
 
-      const mapboxSource = mapRef.current?.getSource('spotters');
-      if (mapboxSource) {
-        // Direct MapLibre Source update, bypass React render cycle
-        const geoJson = generateGeoJson();
-        mapboxSource.setData(geoJson);
-        setActiveSpotters(geoJson.features.length);
-      } else {
-        updatePointsState();
-      }
-    }).subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        const latency = Date.now() - startTime;
-        logTelemetry('websocket_connected', { latency });
-        console.log(`WebSocket connected in ${latency}ms`);
+      channel.on('broadcast', { event: 'location_update' }, (payload) => {
+        const p = payload.payload;
+        pointsRef.current[p.id] = p;
 
-        // Hydrate active spotters for current geohash via REST
-        try {
-          // Clear current points before hydrating new region
-          pointsRef.current = {};
-
-          const { data, error } = await supabase
-            .from('active_spotters')
-            .select('*')
-            .eq('geohash', activeGeohash);
-
-          if (error) throw error;
-
-          if (data && data.length > 0) {
-            data.forEach(p => { pointsRef.current[p.id] = p; });
-            const mapboxSource = mapRef.current?.getSource('spotters');
-            if (mapboxSource) {
-              const geoJson = generateGeoJson();
-              mapboxSource.setData(geoJson);
-              setActiveSpotters(geoJson.features.length);
-            } else {
-              updatePointsState();
-            }
-          } else {
-            // Even if no data, ensure we clear the old data from the map
-            const mapboxSource = mapRef.current?.getSource('spotters');
-            if (mapboxSource) {
-              mapboxSource.setData(generateGeoJson());
-              setActiveSpotters(0);
-            } else {
-              updatePointsState();
-            }
-          }
-        } catch (err) {
-          console.error("Failed to hydrate spotters:", err);
-          logTelemetry('hydration_error', { error: err.message });
+        const mapboxSource = mapRef.current?.getSource('spotters');
+        if (mapboxSource) {
+          const geoJson = generateGeoJson();
+          mapboxSource.setData(geoJson);
+          setActiveSpotters(geoJson.features.length);
+        } else {
+          updatePointsState();
         }
-      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-        logTelemetry('websocket_error', { status });
-      }
-    });
+      }).subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          retryAttempt = 0; // reset on success
+          setWsStatus('CONNECTED');
+          const latency = Date.now() - startTime;
+          logTelemetry('websocket_connected', { latency });
+          console.log(`WebSocket connected in ${latency}ms`);
+
+          // Hydrate
+          try {
+            pointsRef.current = {};
+            const { data, error } = await supabase
+              .from('active_spotters')
+              .select('*')
+              .eq('geohash', activeGeohash);
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+              data.forEach(p => { pointsRef.current[p.id] = p; });
+              const mapboxSource = mapRef.current?.getSource('spotters');
+              if (mapboxSource) {
+                const geoJson = generateGeoJson();
+                mapboxSource.setData(geoJson);
+                setActiveSpotters(geoJson.features.length);
+              } else {
+                updatePointsState();
+              }
+            } else {
+              const mapboxSource = mapRef.current?.getSource('spotters');
+              if (mapboxSource) {
+                mapboxSource.setData(generateGeoJson());
+                setActiveSpotters(0);
+              } else {
+                updatePointsState();
+              }
+            }
+          } catch (err) {
+            console.error("Failed to hydrate spotters:", err);
+            logTelemetry('hydration_error', { error: err.message });
+          }
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          logTelemetry('websocket_error', { status });
+          setWsStatus('ERROR');
+
+          // Exponential backoff
+          const jitter = Math.random() * 500;
+          let delay = Math.min(maxRetryDelay, baseDelay * Math.pow(2, retryAttempt)) + jitter;
+
+          let secondsRemaining = Math.ceil(delay / 1000);
+          setRetrySeconds(secondsRemaining);
+
+          uiCountdownInterval = setInterval(() => {
+            secondsRemaining -= 1;
+            if(secondsRemaining > 0) {
+              setRetrySeconds(secondsRemaining);
+            } else {
+              clearInterval(uiCountdownInterval);
+            }
+          }, 1000);
+
+          reconnectTimeout = setTimeout(() => {
+            retryAttempt++;
+            supabase.removeChannel(channel);
+            connectChannel();
+          }, delay);
+        }
+      });
+    };
+
+    connectChannel();
 
     return () => {
-      supabase.removeChannel(channel);
+      clearTimeout(reconnectTimeout);
+      clearInterval(uiCountdownInterval);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [setActiveSpotters, activeGeohash]);
 
@@ -240,12 +292,23 @@ const MapPage = () => {
     <div className="w-full h-full relative bg-axim-dark">
       <LocationSearch onLocationSelect={handleLocationSelect} />
 
+      {/* Network Status Indicator */}
+      <div className="absolute top-4 right-4 z-10 flex items-center gap-2 glass-panel px-3 py-1.5 rounded-full pointer-events-auto shadow-lg">
+        <div className={`w-2 h-2 rounded-full ${wsStatus === 'CONNECTED' ? 'bg-green-500 animate-pulse' : wsStatus === 'CONNECTING' ? 'bg-yellow-500 animate-pulse' : wsStatus === 'RECONNECTING' || wsStatus === 'ERROR' ? 'bg-orange-500' : 'bg-red-500'}`}></div>
+        <span className="text-xs font-mono font-medium text-slate-300">
+          {wsStatus === 'CONNECTED' && 'LIVE'}
+          {wsStatus === 'CONNECTING' && 'CONNECTING...'}
+          {(wsStatus === 'RECONNECTING' || wsStatus === 'ERROR') && `RETRY IN ${retrySeconds}s`}
+        </span>
+      </div>
+
       <Map
         ref={mapRef}
         initialViewState={{ longitude: -96.797, latitude: 32.776, zoom: 4 }}
         mapStyle={MAP_STYLE}
         interactiveLayerIds={['clusters', 'unclustered-point']}
         onClick={onClick}
+        onMoveEnd={handleMoveEnd}
       >
         <NavigationControl position="bottom-right" />
         

@@ -6,10 +6,10 @@ import { supabase } from '../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 
 const PIPELINE_STEPS = [
-  { id: 'ingest', label: 'Ingest & Metadata Strip', icon: FiIcons.FiShield },
-  { id: 'safety', label: 'Safety & Guardrail Filter', icon: FiIcons.FiEye },
-  { id: 'weather', label: 'Onyx Weather Classification', icon: FiIcons.FiCpu },
-  { id: 'radar', label: 'Radar Cross-Verification', icon: FiIcons.FiMap },
+  { id: 'compress', label: 'Compressing & Stripping Metadata...', icon: FiIcons.FiMinimize2 },
+  { id: 'staging', label: 'Uploading to Secure Staging...', icon: FiIcons.FiUploadCloud },
+  { id: 'scanning', label: 'Onyx Scanning (Analyzing imagery...)', icon: FiIcons.FiCpu },
+  { id: 'review', label: 'Verification & Decision', icon: FiIcons.FiShield },
 ];
 
 const OnyxPipeline = ({ isProcessing, onComplete }) => {
@@ -111,13 +111,13 @@ const OnyxPipeline = ({ isProcessing, onComplete }) => {
 
           return (
             <div key={step.id} className={`
-              flex items-center gap-4 p-3 rounded-lg border transition-all duration-300
+              flex items-center gap-4 p-3 rounded-lg border transition-all duration-500
               ${isCompleted ? 'bg-axim-success/10 border-axim-success/30' : ''}
               ${isActive ? 'bg-axim-accent/10 border-axim-accent shadow-[0_0_10px_rgba(0,229,255,0.2)]' : ''}
               ${isPending ? 'bg-slate-800/30 border-slate-700/50 opacity-50' : ''}
             `}>
               <div className={`
-                w-8 h-8 rounded-full flex items-center justify-center shrink-0
+                w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors duration-300
                 ${isCompleted ? 'bg-axim-success text-slate-900' : ''}
                 ${isActive ? 'bg-axim-accent text-slate-900' : ''}
                 ${isPending ? 'bg-slate-700 text-slate-400' : ''}
@@ -126,15 +126,16 @@ const OnyxPipeline = ({ isProcessing, onComplete }) => {
               </div>
               
               <div className="flex-1">
-                <p className={`font-medium text-sm ${isActive ? 'text-axim-accent' : 'text-slate-200'}`}>
+                <p className={`font-medium text-sm transition-colors duration-300 ${isActive ? 'text-axim-accent' : 'text-slate-200'}`}>
                   {step.label}
+                  {isActive && step.id === 'staging' && <span className="ml-2 animate-pulse">100%</span>}
                 </p>
                 {isActive && (
                   <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: '100%' }}
                     transition={{ duration: 0.8, ease: 'linear' }}
-                    className="h-1 bg-axim-accent mt-2 rounded-full"
+                    className={`h-1 mt-2 rounded-full ${step.id === 'scanning' ? 'bg-gradient-to-r from-axim-accent via-white to-axim-accent animate-[pulse_1s_ease-in-out_infinite] shadow-[0_0_15px_rgba(0,229,255,0.5)]' : 'bg-axim-accent'}`}
                   />
                 )}
               </div>

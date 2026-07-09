@@ -1,14 +1,47 @@
 export async function onRequestPost(context) {
   try {
-    const data = await context.request.json();
-    console.log("Telemetry Payload received:", JSON.stringify(data, null, 2));
+    const rawBody = await context.request.text();
+    if (!rawBody) {
+      return new Response(null, { status: 204 });
+    }
 
-    // Cloudflare pages functions / workers log to the dashboard, so console.log is the expected way
-    // to pipe to the CF dashboard.
+    let payloads;
+    try {
+      payloads = JSON.parse(rawBody);
+    } catch (e) {
+      return new Response(null, { status: 204 });
+    }
 
-    return new Response("OK", { status: 200 });
+    // Handle single payload or batched array
+    if (!Array.isArray(payloads)) {
+      payloads = [payloads];
+    }
+
+    let stats = {
+      avgFps: 0,
+      peakLatency: 0,
+      errorCount: 0,
+      fpsSamples: 0
+    };
+
+    payloads.forEach(data => {
+       if(data.type === 'fps_drop' && data.payload?.fps) {
+         stats.avgFps = ((stats.avgFps * stats.fpsSamples) + data.payload.fps) / (stats.fpsSamples + 1);
+         stats.fpsSamples++;
+       }
+       if(data.type === 'websocket_connected' && data.payload?.latency) {
+         stats.peakLatency = Math.max(stats.peakLatency, data.payload.latency);
+       }
+       if(data.type?.includes('error')) {
+         stats.errorCount++;
+       }
+    });
+
+    console.log("Telemetry Batched Stats:", JSON.stringify(stats, null, 2));
+
+    return new Response(null, { status: 204 }); // 204 No Content
   } catch (err) {
-    console.error("Failed to parse telemetry data", err);
-    return new Response("Bad Request", { status: 400 });
+    console.error("Telemetry parsing exception:", err);
+    return new Response(null, { status: 204 }); // 204 No Content
   }
 }
