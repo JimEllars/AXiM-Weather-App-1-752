@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import SafeIcon from '../../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
+import { supabase } from '../../lib/supabase';
 
 const PIPELINE_STEPS = [
   { id: 'ingest', label: 'Ingest & Metadata Strip', icon: FiIcons.FiShield },
@@ -17,38 +18,62 @@ const OnyxPipeline = ({ isProcessing, onComplete }) => {
   useEffect(() => {
     if (!isProcessing) return;
 
-    let currentStep = 0;
     setCompletedSteps([]);
+    setActiveStep(0);
 
-    const interval = setInterval(() => {
-      setCompletedSteps(prev => [...prev, PIPELINE_STEPS[currentStep].id]);
-      currentStep++;
+    const runPipeline = async () => {
+      // We will do a local mock animation to simulate the backend processing
+      // and then wait for the supabase response to finish it off.
+      let currentStep = 0;
       
-      if (currentStep < PIPELINE_STEPS.length) {
-        setActiveStep(currentStep);
-      } else {
+      const interval = setInterval(() => {
+        setCompletedSteps(prev => [...prev, PIPELINE_STEPS[currentStep].id]);
+        currentStep++;
+        if (currentStep < PIPELINE_STEPS.length) {
+          setActiveStep(currentStep);
+        } else {
+          clearInterval(interval);
+        }
+      }, 800);
+
+      try {
+        const { data, error } = await supabase.functions.invoke('onyx-pipeline', {
+          body: { mediaUrl: 'uploaded-file-url-placeholder' }
+        });
+
         clearInterval(interval);
+        // Mark all steps complete
+        setCompletedSteps(PIPELINE_STEPS.map(s => s.id));
+        setActiveStep(PIPELINE_STEPS.length);
+
+        if (error) throw error;
+
+        // Wait a short moment for the animation before calling onComplete
         setTimeout(() => {
-          // Simulate 80% approval rate
-          const isApproved = Math.random() > 0.2;
-          onComplete(
-            isApproved 
-              ? { 
-                  success: true, 
-                  title: 'Auto-Approved & Published', 
-                  message: 'Onyx verified this submission (Confidence: 94%). It is now live on the Spotter Network map.'
-                }
-              : {
-                  success: false,
-                  title: 'Flagged for Human Review',
-                  message: 'Radar cross-verification returned low confidence for this event. Placed in review queue.'
-                }
-          );
+          onComplete({
+            success: data?.approved || false,
+            title: data?.approved ? 'Auto-Approved & Published' : 'Flagged for Human Review',
+            message: data?.message || (data?.approved ? 'Onyx verified this submission. It is now live on the Spotter Network map.' : 'Radar cross-verification returned low confidence for this event. Placed in review queue.')
+          });
+        }, 500);
+
+      } catch (err) {
+        clearInterval(interval);
+        setCompletedSteps(PIPELINE_STEPS.map(s => s.id));
+        setActiveStep(PIPELINE_STEPS.length);
+
+        setTimeout(() => {
+          onComplete({
+            success: false,
+            title: 'Processing Failed',
+            message: 'Unable to connect to Onyx AI pipeline. Please try again later.'
+          });
         }, 500);
       }
-    }, 1200); // 1.2s per step to simulate processing
+    };
 
-    return () => clearInterval(interval);
+    runPipeline();
+
   }, [isProcessing, onComplete]);
 
   return (
@@ -88,7 +113,7 @@ const OnyxPipeline = ({ isProcessing, onComplete }) => {
                   <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: '100%' }}
-                    transition={{ duration: 1.2, ease: 'linear' }}
+                    transition={{ duration: 0.8, ease: 'linear' }}
                     className="h-1 bg-axim-accent mt-2 rounded-full"
                   />
                 )}
