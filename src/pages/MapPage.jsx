@@ -1,11 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import Map, { Marker, NavigationControl } from 'react-map-gl/maplibre';
-import useSupercluster from 'use-supercluster';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import Map, { NavigationControl, Source, Layer } from 'react-map-gl/maplibre';
 import { supabase } from '../lib/supabase';
 import { useAxim } from '../context/AximContext';
 import MapControls from '../components/Map/MapControls';
-import ClusterMarker from '../components/Map/ClusterMarker';
-import SpotterMarker from '../components/Map/SpotterMarker';
 import RadarScrubber from '../components/Radar/RadarScrubber';
 import WeatherLegend from '../components/Radar/WeatherLegend';
 import RadarOverlay from '../components/Radar/RadarOverlay';
@@ -16,8 +13,6 @@ const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.j
 const MapPage = () => {
   const mapRef = useRef();
   const { setActiveSpotters } = useAxim();
-  const [bounds, setBounds] = useState(null);
-  const [zoom, setZoom] = useState(4);
   const [points, setPoints] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [layers, setLayers] = useState({ radar: true, velocity: false, spotters: true });
@@ -55,14 +50,10 @@ const MapPage = () => {
     const channel = supabase.channel('spatial:tracking');
     const startTime = Date.now();
 
-    channel.on('broadcast', { event: 'location_update' }, (payload) => {
-      const p = payload.payload;
-      pointsRef.current[p.id] = p;
-
+    const updatePoints = () => {
       const newPoints = Object.values(pointsRef.current).map(spotter => ({
         type: 'Feature',
         properties: {
-          cluster: false,
           spotterId: spotter.id,
           status: spotter.status || 'active',
           heading: spotter.heading || 0,
@@ -74,92 +65,137 @@ const MapPage = () => {
       }));
       setPoints(newPoints);
       setActiveSpotters(newPoints.length);
+    };
+
+    channel.on('broadcast', { event: 'location_update' }, (payload) => {
+      const p = payload.payload;
+      pointsRef.current[p.id] = p;
+      updatePoints();
     }).subscribe((status) => {
       if (status === 'SUBSCRIBED') {
-        logTelemetry('websocket_connected', { latency: Date.now() - startTime });
+        const latency = Date.now() - startTime;
+        logTelemetry('websocket_connected', { latency });
+        console.log(`WebSocket connected in ${latency}ms`);
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
         logTelemetry('websocket_error', { status });
       }
     });
 
     // Mock initial data if no broadcast is sent yet (to show something)
-    const initialPoints = Array.from({ length: 50 }).map((_, i) => ({
+    const initialPoints = Array.from({ length: 500 }).map((_, i) => ({
       id: `spotter-init-${i}`,
-      lng: -96.797 + (Math.random() - 0.5) * 10,
-      lat: 32.776 + (Math.random() - 0.5) * 10,
+      lng: -96.797 + (Math.random() - 0.5) * 20,
+      lat: 32.776 + (Math.random() - 0.5) * 20,
       status: Math.random() > 0.9 ? 'live' : 'active',
       heading: Math.random() * 360
     }));
 
     initialPoints.forEach(p => { pointsRef.current[p.id] = p; });
-    const newPoints = initialPoints.map(spotter => ({
-        type: 'Feature',
-        properties: {
-          cluster: false,
-          spotterId: spotter.id,
-          status: spotter.status,
-          heading: spotter.heading,
-        },
-        geometry: {
-          type: 'Point',
-          coordinates: [spotter.lng, spotter.lat]
-        }
-    }));
-    setPoints(newPoints);
-    setActiveSpotters(newPoints.length);
+    updatePoints();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [setActiveSpotters]);
 
-  const { clusters, supercluster } = useSupercluster({
-    points: layers.spotters ? points : [],
-    bounds, zoom, options: { radius: 75, maxZoom: 20 }
-  });
+  const geoJsonData = useMemo(() => ({
+    type: 'FeatureCollection',
+    features: points
+  }), [points]);
 
-  const handleMapChange = useCallback(() => {
-    if (mapRef.current) {
-      const b = mapRef.current.getMap().getBounds();
-      setBounds([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
-      setZoom(mapRef.current.getMap().getZoom());
+  const clusterLayer = {
+    id: 'clusters',
+    type: 'circle',
+    source: 'spotters',
+    filter: ['has', 'point_count'],
+    paint: {
+      'circle-color': ['step', ['get', 'point_count'], '#00e5ff', 100, '#00b3cc', 750, '#008099'],
+      'circle-radius': ['step', ['get', 'point_count'], 20, 100, 30, 750, 40],
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#ffffff'
     }
-  }, []);
+  };
+
+  const clusterCountLayer = {
+    id: 'cluster-count',
+    type: 'symbol',
+    source: 'spotters',
+    filter: ['has', 'point_count'],
+    layout: {
+      'text-field': '{point_count_abbreviated}',
+      'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+      'text-size': 12
+    },
+    paint: {
+      'text-color': '#ffffff'
+    }
+  };
+
+  const unclusteredPointLayer = {
+    id: 'unclustered-point',
+    type: 'circle',
+    source: 'spotters',
+    filter: ['!', ['has', 'point_count']],
+    paint: {
+      'circle-color': [
+        'match',
+        ['get', 'status'],
+        'live', '#ff3d71',
+        '#00e5ff' // default to active
+      ],
+      'circle-radius': 8,
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#ffffff'
+    }
+  };
+
+  const onClick = (event) => {
+    const feature = event.features[0];
+    if (!feature) return;
+
+    if (feature.layer.id === 'clusters') {
+      const clusterId = feature.properties.cluster_id;
+      const mapboxSource = mapRef.current.getSource('spotters');
+
+      mapboxSource.getClusterExpansionZoom(clusterId, (err, zoom) => {
+        if (err) return;
+
+        mapRef.current.easeTo({
+          center: feature.geometry.coordinates,
+          zoom: zoom,
+          duration: 500
+        });
+      });
+    }
+  };
 
   return (
     <div className="w-full h-full relative bg-axim-dark">
       <Map
         ref={mapRef}
-        initialViewState={{ longitude: -96.797, latitude: 32.776, zoom: 5 }}
+        initialViewState={{ longitude: -96.797, latitude: 32.776, zoom: 4 }}
         mapStyle={MAP_STYLE}
-        onMove={handleMapChange}
-        onLoad={handleMapChange}
+        interactiveLayerIds={['clusters', 'unclustered-point']}
+        onClick={onClick}
       >
         <NavigationControl position="bottom-right" />
         
         <RadarOverlay isVisible={layers.radar} opacity={isPlaying ? 0.8 : 0.5} />
 
-        {clusters.map(cluster => {
-          const [lng, lat] = cluster.geometry.coordinates;
-          const { cluster: isCluster, point_count: count } = cluster.properties;
-
-          if (isCluster) {
-            return (
-              <Marker key={`c-${cluster.id}`} latitude={lat} longitude={lng} style={{ transition: 'all 0.3s ease-out' }}>
-                <ClusterMarker count={count} totalPoints={points.length} onClick={() => {
-                  const z = Math.min(supercluster.getClusterExpansionZoom(cluster.id), 20);
-                  mapRef.current?.getMap().flyTo({ center: [lng, lat], zoom: z, speed: 1.5 });
-                }} />
-              </Marker>
-            );
-          }
-
-          return (
-            <Marker key={cluster.properties.spotterId} latitude={lat} longitude={lng} style={{ transition: 'all 0.3s ease-out' }}>
-              <SpotterMarker status={cluster.properties.status} heading={cluster.properties.heading} />
-            </Marker>
-          );
-        })}
+        {layers.spotters && (
+          <Source
+            id="spotters"
+            type="geojson"
+            data={geoJsonData}
+            cluster={true}
+            clusterMaxZoom={14}
+            clusterRadius={50}
+          >
+            <Layer {...clusterLayer} />
+            <Layer {...clusterCountLayer} />
+            <Layer {...unclusteredPointLayer} />
+          </Source>
+        )}
       </Map>
 
       <MapControls layers={layers} setLayers={setLayers} activeSpotters={points.length} />
