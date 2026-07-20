@@ -12,7 +12,7 @@ const PIPELINE_STEPS = [
   { id: 'review', label: 'Verification & Decision', icon: FiIcons.FiShield },
 ];
 
-const OnyxPipeline = ({ isProcessing, onComplete }) => {
+const OnyxPipeline = ({ isProcessing, onComplete, metadata }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState([]);
   const navigate = useNavigate();
@@ -42,7 +42,10 @@ const OnyxPipeline = ({ isProcessing, onComplete }) => {
         const { data: { session } } = await supabase.auth.getSession();
 
         const { data, error } = await supabase.functions.invoke('onyx-pipeline', {
-          body: { mediaUrl: 'uploaded-file-url-placeholder' },
+          body: {
+            mediaUrl: 'uploaded-file-url-placeholder',
+            metadata: metadata
+          },
           headers: session?.access_token ? {
             Authorization: `Bearer ${session.access_token}`
           } : undefined

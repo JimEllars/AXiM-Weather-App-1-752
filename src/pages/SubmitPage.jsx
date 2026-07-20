@@ -8,46 +8,99 @@ const SubmitPage = () => {
   const [file, setFile] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState(null);
+  const [metadata, setMetadata] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
+
+
+  const validateFile = (file) => {
+    if (!file) return false;
+
+    // Check type
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+      setUploadError('Invalid file type. Please upload an image or video.');
+      return false;
+    }
+
+    // Check size (50MB = 50 * 1024 * 1024 bytes)
+    if (file.size > 50 * 1024 * 1024) {
+      setUploadError('File size exceeds 50MB limit.');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const droppedFile = e.dataTransfer.files[0];
+    processFile(droppedFile);
+  };
 
   const handleUpload = (e) => {
     const selected = e.target.files[0];
-    if (selected) {
-      if (selected.type.startsWith('image/')) {
-        const img = new Image();
-        img.onload = () => {
-          let width = img.width;
-          let height = img.height;
+    processFile(selected);
+  };
 
-          if (width > 1920 || height > 1920) {
-            if (width > height) {
-              height *= 1920 / width;
-              width = 1920;
-            } else {
-              width *= 1920 / height;
-              height = 1920;
-            }
+  const processFile = (selected) => {
+    setUploadError(null);
+    if (!validateFile(selected)) return;
 
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
+    // Capture location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setMetadata({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            timestamp: new Date().toISOString()
+          });
+        },
+        (error) => {
+          console.warn('Geolocation failed:', error);
+          // Proceed without location if denied
+        }
+      );
+    }
 
-            canvas.toBlob((blob) => {
-              const resizedUrl = URL.createObjectURL(blob);
-              setFile(resizedUrl);
-              simulateUpload();
-            }, selected.type);
+    if (selected.type.startsWith('image/')) {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > 1920 || height > 1920) {
+          if (width > height) {
+            height *= 1920 / width;
+            width = 1920;
           } else {
-            setFile(URL.createObjectURL(selected));
-            simulateUpload();
+            width *= 1920 / height;
+            height = 1920;
           }
-        };
-        img.src = URL.createObjectURL(selected);
-      } else {
-        setFile(URL.createObjectURL(selected));
-        simulateUpload();
-      }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob((blob) => {
+            const resizedUrl = URL.createObjectURL(blob);
+            setFile(resizedUrl);
+            simulateUpload();
+          }, selected.type);
+        } else {
+          setFile(URL.createObjectURL(selected));
+          simulateUpload();
+        }
+      };
+      img.src = URL.createObjectURL(selected);
+    } else {
+      setFile(URL.createObjectURL(selected));
+      simulateUpload();
     }
   };
 
@@ -66,6 +119,8 @@ const SubmitPage = () => {
     setFile(null);
     setResult(null);
     setIsProcessing(false);
+    setMetadata(null);
+    setUploadError(null);
   };
 
   return (
@@ -89,6 +144,8 @@ const SubmitPage = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
               className="glass-panel p-12 border-dashed border-2 border-slate-700 hover:border-axim-accent transition-colors flex flex-col items-center justify-center text-center cursor-pointer relative"
             >
               <input 
@@ -100,10 +157,13 @@ const SubmitPage = () => {
               <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mb-4">
                 <SafeIcon icon={FiIcons.FiUploadCloud} className="text-4xl text-axim-accent" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Tap to Upload Media</h3>
+              <h3 className="text-xl font-bold text-white mb-2">Drag & Drop or Tap to Upload</h3>
               <p className="text-sm text-slate-400 max-w-sm">
-                Photos and short videos are auto-tagged with your exact location and timestamp.
+                Photos and videos up to 50MB. Submissions will capture your current GPS location.
               </p>
+              {uploadError && (
+                <p className="mt-4 text-axim-danger text-sm font-semibold">{uploadError}</p>
+              )}
             </motion.div>
           ) : (
             <motion.div 
@@ -126,6 +186,7 @@ const SubmitPage = () => {
                   <OnyxPipeline 
                     isProcessing={isProcessing} 
                     onComplete={handlePipelineComplete} 
+                    metadata={metadata}
                   />
                 </div>
               </div>

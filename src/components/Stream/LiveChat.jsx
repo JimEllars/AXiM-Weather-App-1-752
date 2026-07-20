@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import SafeIcon from '../../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
+import { supabase } from '../../lib/supabase';
 
 const MOCK_MESSAGES = [
   "Large hail reported in Norman!",
@@ -17,6 +18,22 @@ const LiveChat = () => {
   ]);
   const [input, setInput] = useState("");
   const scrollRef = useRef();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsAuthenticated(!!session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -71,18 +88,27 @@ const LiveChat = () => {
         ))}
       </div>
 
-      <form onSubmit={sendMessage} className="p-4 bg-slate-900/80 border-t border-slate-800 flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Send field report..."
-          className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-axim-accent transition-colors"
-        />
-        <button className="p-2 bg-axim-accent text-axim-dark rounded-lg hover:scale-105 transition-transform">
-          <SafeIcon icon={FiIcons.FiSend} />
-        </button>
-      </form>
+      {isAuthenticated ? (
+        <form onSubmit={sendMessage} className="p-4 bg-slate-900/80 border-t border-slate-800 flex gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Send field report..."
+            className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-axim-accent transition-colors"
+          />
+          <button className="p-2 bg-axim-accent text-axim-dark rounded-lg hover:scale-105 transition-transform">
+            <SafeIcon icon={FiIcons.FiSend} />
+          </button>
+        </form>
+      ) : (
+        <div className="p-4 bg-slate-900/80 border-t border-slate-800 flex items-center justify-center">
+           <div className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-full text-sm text-slate-400 flex items-center gap-2">
+             <SafeIcon icon={FiIcons.FiLock} className="text-slate-500" />
+             <a href="/login" className="font-bold text-axim-accent hover:underline">Log in</a> to chat
+           </div>
+        </div>
+      )}
     </div>
   );
 };
