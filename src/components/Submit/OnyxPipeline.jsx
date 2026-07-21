@@ -15,6 +15,7 @@ const PIPELINE_STEPS = [
 const OnyxPipeline = ({ isProcessing, onComplete, metadata, fileUrl }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState([]);
+  const [isCompressing, setIsCompressing] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -41,12 +42,41 @@ const OnyxPipeline = ({ isProcessing, onComplete, metadata, fileUrl }) => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
 
-        // 1. Upload to Cloudflare R2
+        // 1. Fetch file blob
         const response = await fetch(fileUrl);
         const blob = await response.blob();
 
+        let uploadBlob = blob;
+        let fileName = 'upload.bin';
+
+        // Client-Side Compression
+        if (blob.type.startsWith('image/')) {
+          setIsCompressing(true);
+          uploadBlob = await new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0);
+              canvas.toBlob(
+                (compressedBlob) => resolve(compressedBlob),
+                'image/jpeg',
+                0.6 // Compress to 60% quality
+              );
+            };
+            img.onerror = () => resolve(blob); // fallback if error
+            img.src = URL.createObjectURL(blob);
+          });
+          fileName = 'upload.jpg';
+          setIsCompressing(false);
+        } else if (blob.type.startsWith('video/')) {
+          fileName = 'upload.mp4';
+        }
+
         const formData = new FormData();
-        formData.append('file', blob, 'upload.bin'); // Use a generic name or parse from fileUrl if available
+        formData.append('file', uploadBlob, fileName);
 
         const uploadResponse = await fetch('/api/upload', {
           method: 'POST',
@@ -137,10 +167,19 @@ const OnyxPipeline = ({ isProcessing, onComplete, metadata, fileUrl }) => {
   }, [isProcessing, onComplete, navigate, fileUrl, metadata]);
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full space-y-4 relative">
+      {isCompressing && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-lg border border-slate-700/50">
+          <div className="flex flex-col items-center gap-3 p-4 bg-slate-800/80 rounded-xl shadow-lg border border-slate-700">
+            <FiIcons.FiMinimize2 className="text-3xl text-axim-accent animate-pulse" />
+            <span className="text-sm font-bold text-white tracking-wide">Compressing & Securing Payload...</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Onyx AI Workflow</h3>
-        {isProcessing && <span className="text-xs text-axim-accent animate-pulse font-mono">Processing...</span>}
+        {isProcessing && !isCompressing && <span className="text-xs text-axim-accent animate-pulse font-mono">Processing...</span>}
       </div>
 
       <div className="space-y-3">
