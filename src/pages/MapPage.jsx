@@ -382,11 +382,53 @@ const MapPage = () => {
                   <p className="text-slate-400 text-[10px] uppercase tracking-wider">Verified Upload</p>
                 </div>
                 <div className="flex gap-1">
-                  <button className="flex items-center justify-center p-1.5 rounded-md bg-slate-800 hover:bg-green-500/20 text-slate-400 hover:text-green-400 transition-colors border border-slate-700 hover:border-green-500/50 group" title="Helpful">
+                  <button
+                    onClick={async () => {
+                      const newCount = (selectedMedia.verification_count || 0) + 1;
+                      // Optimistic UI update
+                      setSelectedMedia({ ...selectedMedia, verification_count: newCount });
+                      setMediaEvents(prev => prev.map(m => m.id === selectedMedia.id ? { ...m, verification_count: newCount } : m));
+
+                      const { error } = await supabase
+                        .from('telemetry_events')
+                        .update({ verification_count: newCount })
+                        .eq('id', selectedMedia.id);
+
+                      if (error) {
+                        console.error('Error updating verification count:', error);
+                        // Revert optimistic update
+                        setSelectedMedia({ ...selectedMedia, verification_count: newCount - 1 });
+                        setMediaEvents(prev => prev.map(m => m.id === selectedMedia.id ? { ...m, verification_count: newCount - 1 } : m));
+                      }
+                    }}
+                    className="flex items-center justify-center p-1.5 rounded-md bg-slate-800 hover:bg-green-500/20 text-slate-400 hover:text-green-400 transition-colors border border-slate-700 hover:border-green-500/50 group" title="Helpful"
+                  >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
+                    {selectedMedia.verification_count > 0 && <span className="ml-1 text-xs">{selectedMedia.verification_count}</span>}
                   </button>
-                  <button className="flex items-center justify-center p-1.5 rounded-md bg-slate-800 hover:bg-axim-accent/20 text-slate-400 hover:text-axim-accent transition-colors border border-slate-700 hover:border-axim-accent/50 group" title="Verify">
+                  <button
+                    onClick={async () => {
+                      const newCount = (selectedMedia.verification_count || 0) + 1;
+                      // Optimistic UI update
+                      setSelectedMedia({ ...selectedMedia, verification_count: newCount });
+                      setMediaEvents(prev => prev.map(m => m.id === selectedMedia.id ? { ...m, verification_count: newCount } : m));
+
+                      const { error } = await supabase
+                        .from('telemetry_events')
+                        .update({ verification_count: newCount })
+                        .eq('id', selectedMedia.id);
+
+                      if (error) {
+                        console.error('Error updating verification count:', error);
+                        // Revert optimistic update
+                        setSelectedMedia({ ...selectedMedia, verification_count: newCount - 1 });
+                        setMediaEvents(prev => prev.map(m => m.id === selectedMedia.id ? { ...m, verification_count: newCount - 1 } : m));
+                      }
+                    }}
+                    className="flex items-center justify-center p-1.5 rounded-md bg-slate-800 hover:bg-axim-accent/20 text-slate-400 hover:text-axim-accent transition-colors border border-slate-700 hover:border-axim-accent/50 group" title="Verify"
+                  >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    {selectedMedia.verification_count > 0 && <span className="ml-1 text-xs">{selectedMedia.verification_count}</span>}
                   </button>
                 </div>
               </div>

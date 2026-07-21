@@ -4,11 +4,11 @@ export async function onRequestPost(context) {
   const { request, env } = context;
 
   // Validate the request signature/token
-  const authHeader = request.headers.get('Authorization');
-  const secretToken = env.STREAMLABS_SECRET_TOKEN;
+  const authHeader = request.headers.get('X-Streamlabs-Secret');
+  const secretToken = env.STREAMLABS_WEBHOOK_SECRET;
 
-  // Simple bearer token validation
-  if (!authHeader || authHeader !== \`Bearer \${secretToken}\`) {
+  // Simple secret validation
+  if (!authHeader || authHeader !== secretToken) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' }
@@ -54,6 +54,12 @@ export async function onRequestPost(context) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    // Invalidate edge caches for web hooks
+    const cache = caches.default;
+    const urlBase = new URL(request.url).origin;
+    await cache.delete(new Request(`${urlBase}/api/weather`));
+    await cache.delete(new Request(`${urlBase}/api/stream-status`));
 
     return new Response(JSON.stringify({ success: true, is_live, stream_url }), {
       status: 200,

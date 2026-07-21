@@ -23,9 +23,11 @@ export async function onRequestPost({ request, env }) {
       httpMetadata: { contentType: file.type }
     });
 
-    // Return the public R2 URL
+    // Return the public R2 URL with Cloudflare Image optimization support
     const publicR2Domain = env.PUBLIC_R2_URL || 'https://axim-r2.example.com';
-    const mediaUrl = `${publicR2Domain}/${filename}`;
+    // Format returned R2 media URLs to support Cloudflare Image CDN resize parameters
+    // Cloudflare Image Resizing typically works via /cdn-cgi/image/ parameters
+    const mediaUrl = `${publicR2Domain}/cdn-cgi/image/width=800,quality=85/${filename}`;
 
     return new Response(JSON.stringify({ mediaUrl }), {
       status: 200,
