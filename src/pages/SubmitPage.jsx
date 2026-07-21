@@ -184,7 +184,7 @@ const SubmitPage = () => {
                 
                 <div className="flex-1 w-full">
                   <OnyxPipeline 
-                    isProcessing={isProcessing} 
+                    isProcessing={isProcessing} fileUrl={file}
                     onComplete={handlePipelineComplete} 
                     metadata={metadata}
                   />
