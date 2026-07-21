@@ -7,23 +7,28 @@ import StreamPage from './pages/StreamPage';
 import SettingsPage from './pages/SettingsPage';
 import ForumsPage from './pages/ForumsPage';
 import ForumCategoryView from './pages/ForumCategoryView';
+import ForumThreadView from './pages/ForumThreadView';
 import ProtectedRoute from './components/Common/ProtectedRoute';
 import ProfilePage from './pages/ProfilePage';
+import ErrorBoundary from './components/Common/ErrorBoundary';
 
 function App() {
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Navigate to="/map" replace />} />
-        <Route path="/map" element={<MapPage />} />
-        <Route path="/submit" element={<SubmitPage />} />
-        <Route path="/stream" element={<StreamPage />} />
-        <Route path="/forums" element={<ForumsPage />} />
-        <Route path="/forums/:categoryId" element={<ProtectedRoute><ForumCategoryView /></ProtectedRoute>} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-      </Routes>
-    </Layout>
+    <ErrorBoundary>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Navigate to="/map" replace />} />
+          <Route path="/map" element={<MapPage />} />
+          <Route path="/submit" element={<SubmitPage />} />
+          <Route path="/stream" element={<StreamPage />} />
+          <Route path="/forums" element={<ForumsPage />} />
+          <Route path="/forums/:categoryId" element={<ProtectedRoute><ForumCategoryView /></ProtectedRoute>} />
+          <Route path="/forums/:categoryId/thread/:threadId" element={<ProtectedRoute><ForumThreadView /></ProtectedRoute>} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+        </Routes>
+      </Layout>
+    </ErrorBoundary>
   );
 }
 

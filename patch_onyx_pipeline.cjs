@@ -1,4 +1,6 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+const fs = require('fs');
+
+const content = `import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -19,7 +21,7 @@ serve(async (req) => {
     const eventId = record.id;
     const mediaUrl = record.media_url || "unknown";
 
-    console.log(`Processing telemetry event ${eventId} with media: ${mediaUrl}`);
+    console.log(\`Processing telemetry event \${eventId} with media: \${mediaUrl}\`);
 
     // Actual AI Vision Fetch Call
     console.log("Initiating AI Vision analysis...");
@@ -27,7 +29,7 @@ serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('VISION_API_KEY') || 'mock-key'}`
+        'Authorization': \`Bearer \${Deno.env.get('VISION_API_KEY') || 'mock-key'}\`
       },
       body: JSON.stringify({ image_url: mediaUrl })
     });
@@ -53,7 +55,7 @@ serve(async (req) => {
       throw updateError;
     }
 
-    console.log(`Telemetry event ${eventId} successfully verified with severity: ${severity}`);
+    console.log(\`Telemetry event \${eventId} successfully verified with severity: \${severity}\`);
 
     return new Response(
       JSON.stringify({ success: true, message: "Onyx pipeline processing completed", eventId, verified: isVerified, severity }),
@@ -67,3 +69,6 @@ serve(async (req) => {
     );
   }
 });
+`;
+
+fs.writeFileSync('supabase/functions/onyx-pipeline/index.ts', content);

@@ -1,0 +1,12 @@
+<<<<<<< SEARCH
+              <div
+                key={thread.id}
+                className="glass-panel p-4 md:p-6 border border-slate-700/50 hover:border-axim-accent/50 transition-colors cursor-pointer group flex flex-col md:flex-row md:items-center justify-between gap-4"
+              >
+=======
+              <div
+                key={thread.id}
+                onClick={() => navigate(`/forums/${categoryId}/thread/${thread.id}`)}
+                className="glass-panel p-4 md:p-6 border border-slate-700/50 hover:border-axim-accent/50 transition-colors cursor-pointer group flex flex-col md:flex-row md:items-center justify-between gap-4"
+              >
+>>>>>>> REPLACE
