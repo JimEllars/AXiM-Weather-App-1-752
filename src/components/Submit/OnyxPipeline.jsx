@@ -12,7 +12,7 @@ const PIPELINE_STEPS = [
   { id: 'review', label: 'Verification & Decision', icon: FiIcons.FiShield },
 ];
 
-const OnyxPipeline = ({ isProcessing, onComplete, metadata }) => {
+const OnyxPipeline = ({ isProcessing, onComplete, metadata, fileUrl }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState([]);
   const navigate = useNavigate();
@@ -23,7 +23,7 @@ const OnyxPipeline = ({ isProcessing, onComplete, metadata }) => {
     setCompletedSteps([]);
     setActiveStep(0);
 
-    const runPipeline = async () => {
+        const runPipeline = async () => {
       // We will do a local mock animation to simulate the backend processing
       // and then wait for the supabase response to finish it off.
       let currentStep = 0;
@@ -41,9 +41,46 @@ const OnyxPipeline = ({ isProcessing, onComplete, metadata }) => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
 
+        // 1. Upload to Cloudflare R2
+        const response = await fetch(fileUrl);
+        const blob = await response.blob();
+
+        const formData = new FormData();
+        formData.append('file', blob, 'upload.bin'); // Use a generic name or parse from fileUrl if available
+
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          headers: session?.access_token ? {
+            Authorization: `Bearer ${session.access_token}`
+          } : {},
+          body: formData,
+        });
+
+        if (uploadResponse.status === 401) {
+          clearInterval(interval);
+          navigate('/login');
+          return;
+        }
+
+        if (!uploadResponse.ok) {
+           throw new Error('Failed to upload file to R2');
+        }
+
+        const { mediaUrl } = await uploadResponse.json();
+
+        // 2. Insert telemetry event to Supabase
+        const { error: dbError } = await supabase.from('telemetry_events').insert({
+          ...metadata,
+          media_url: mediaUrl
+        });
+
+        if (dbError) throw dbError;
+
+        // 3. Invoke Onyx Pipeline (Optional for AI processing, mocked here for simulation)
+        // Kept for UI workflow matching original code, assuming telemetry_events insert covers the data layer.
         const { data, error } = await supabase.functions.invoke('onyx-pipeline', {
           body: {
-            mediaUrl: 'uploaded-file-url-placeholder',
+            mediaUrl: mediaUrl,
             metadata: metadata
           },
           headers: session?.access_token ? {
@@ -89,7 +126,7 @@ const OnyxPipeline = ({ isProcessing, onComplete, metadata }) => {
           onComplete({
             success: false,
             title: 'Processing Failed',
-            message: 'Unable to connect to Onyx AI pipeline. Please try again later.'
+            message: 'Unable to process pipeline: ' + (err.message || 'Unknown error')
           });
         }, 500);
       }
@@ -97,7 +134,7 @@ const OnyxPipeline = ({ isProcessing, onComplete, metadata }) => {
 
     runPipeline();
 
-  }, [isProcessing, onComplete, navigate]);
+  }, [isProcessing, onComplete, navigate, fileUrl, metadata]);
 
   return (
     <div className="w-full space-y-4">

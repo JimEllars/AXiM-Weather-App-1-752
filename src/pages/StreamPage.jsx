@@ -3,11 +3,42 @@ import SafeIcon from '../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 import LiveChat from '../components/Stream/LiveChat';
 import { supabase } from '../lib/supabase';
+import Hls from 'hls.js';
+import { useRef } from 'react';
 
 const StreamPage = () => {
   const [vodData, setVodData] = useState([]);
   const [isLive, setIsLive] = useState(false);
   const [streamUrl, setStreamUrl] = useState('');
+  const videoRef = useRef(null);
+
+
+  useEffect(() => {
+    let hls;
+
+    if (isLive && streamUrl && videoRef.current) {
+      if (Hls.isSupported()) {
+        hls = new Hls();
+        hls.loadSource(streamUrl);
+        hls.attachMedia(videoRef.current);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          videoRef.current.play().catch(e => console.log('Auto-play prevented:', e));
+        });
+      } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+        // Fallback for Safari
+        videoRef.current.src = streamUrl;
+        videoRef.current.addEventListener('loadedmetadata', () => {
+          videoRef.current.play().catch(e => console.log('Auto-play prevented:', e));
+        });
+      }
+    }
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+    };
+  }, [isLive, streamUrl]);
 
   useEffect(() => {
     const fetchVods = async () => {
@@ -87,7 +118,7 @@ const StreamPage = () => {
           {isLive ? (
             <>
               {/* In a real app you'd use a video player like video.js or hls.js here to play streamUrl */}
-              <video src={streamUrl} autoPlay muted loop controls className="w-full h-full object-cover" />
+              <video ref={videoRef} autoPlay muted loop controls className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent p-6 flex flex-col justify-end pointer-events-none">
                  <div className="flex items-end justify-between pointer-events-auto">
                     <div>
