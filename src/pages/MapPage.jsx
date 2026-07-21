@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import Map, { NavigationControl, Source, Layer } from 'react-map-gl/maplibre';
+import Map, { NavigationControl, Source, Layer, Marker, Popup } from 'react-map-gl/maplibre';
 import { supabase } from '../lib/supabase';
 import { useAxim } from '../context/AximContext';
 import MapControls from '../components/Map/MapControls';
@@ -18,7 +18,7 @@ const MapPage = () => {
   // We keep points state only for initial load, but for high-frequency updates, we bypass React state.
   const [points, setPoints] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [layers, setLayers] = useState({ radar: true, velocity: false, spotters: true });
+  const [layers, setLayers] = useState({ radar: true, velocity: false, spotters: true, media: false });
   const [selectedLocation, setSelectedLocation] = useState(null);
 
   const frameCountRef = useRef(0);
@@ -28,6 +28,8 @@ const MapPage = () => {
   const [activeGeohash, setActiveGeohash] = useState('9v6');
   const [wsStatus, setWsStatus] = useState('CONNECTING'); // CONNECTING, CONNECTED, RECONNECTING, ERROR
   const [retrySeconds, setRetrySeconds] = useState(0);
+  const [mediaEvents, setMediaEvents] = useState([]);
+  const [selectedMedia, setSelectedMedia] = useState(null);
 
   const debounceTimeout = useRef(null);
 
@@ -203,6 +205,24 @@ const MapPage = () => {
     };
   }, [setActiveSpotters, activeGeohash]);
 
+  useEffect(() => {
+    if (layers.media) {
+      const fetchMediaEvents = async () => {
+        const { data, error } = await supabase
+          .from('telemetry_events')
+          .select('*')
+          .not('media_url', 'is', null);
+
+        if (!error && data) {
+          setMediaEvents(data);
+        }
+      };
+      fetchMediaEvents();
+    } else {
+      setMediaEvents([]);
+    }
+  }, [layers.media]);
+
   const geoJsonData = useMemo(() => ({
     type: 'FeatureCollection',
     features: points
@@ -312,7 +332,7 @@ const MapPage = () => {
       >
         <NavigationControl position="bottom-right" />
         
-        <RadarOverlay isVisible={layers.radar} opacity={isPlaying ? 0.8 : 0.5} />
+        <RadarOverlay isVisible={layers.radar && !layers.media} opacity={isPlaying ? 0.8 : 0.5} />
 
         {layers.spotters && (
           <Source
@@ -327,6 +347,51 @@ const MapPage = () => {
             <Layer {...clusterCountLayer} />
             <Layer {...unclusteredPointLayer} />
           </Source>
+        )}
+
+        {layers.media && mediaEvents.map(event => (
+          <Marker
+            key={event.id}
+            longitude={event.lng || 0}
+            latitude={event.lat || 0}
+            anchor="bottom"
+            onClick={e => {
+              e.originalEvent.stopPropagation();
+              setSelectedMedia(event);
+            }}
+          >
+            <div className="w-8 h-8 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center cursor-pointer shadow-lg overflow-hidden">
+              {event.media_url ? <img src={event.media_url} alt="media" className="w-full h-full object-cover" /> : <span className="text-xs text-white">Media</span>}
+            </div>
+          </Marker>
+        ))}
+
+        {selectedMedia && (
+          <Popup
+            longitude={selectedMedia.lng || 0}
+            latitude={selectedMedia.lat || 0}
+            anchor="top"
+            onClose={() => setSelectedMedia(null)}
+            className="z-50"
+          >
+            <div className="bg-axim-dark p-3 rounded-lg border border-slate-700 max-w-[250px] shadow-2xl">
+              {selectedMedia.media_url && <img src={selectedMedia.media_url} className="w-full rounded mb-2 object-cover max-h-48" alt="Spotter Media" />}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white text-sm font-bold">{selectedMedia.type || 'Media Update'}</p>
+                  <p className="text-slate-400 text-[10px] uppercase tracking-wider">Verified Upload</p>
+                </div>
+                <div className="flex gap-1">
+                  <button className="flex items-center justify-center p-1.5 rounded-md bg-slate-800 hover:bg-green-500/20 text-slate-400 hover:text-green-400 transition-colors border border-slate-700 hover:border-green-500/50 group" title="Helpful">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
+                  </button>
+                  <button className="flex items-center justify-center p-1.5 rounded-md bg-slate-800 hover:bg-axim-accent/20 text-slate-400 hover:text-axim-accent transition-colors border border-slate-700 hover:border-axim-accent/50 group" title="Verify">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Popup>
         )}
       </Map>
 
