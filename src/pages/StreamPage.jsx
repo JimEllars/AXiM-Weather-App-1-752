@@ -10,23 +10,26 @@ const StreamPage = () => {
   const [vodData, setVodData] = useState([]);
   const [isLive, setIsLive] = useState(false);
   const [streamUrl, setStreamUrl] = useState('');
+  const [activeVod, setActiveVod] = useState(null);
   const videoRef = useRef(null);
 
 
   useEffect(() => {
     let hls;
 
-    if (isLive && streamUrl && videoRef.current) {
+    const currentUrl = activeVod ? activeVod.video_url : streamUrl;
+
+    if ((isLive || activeVod) && currentUrl && videoRef.current) {
       if (Hls.isSupported()) {
         hls = new Hls();
-        hls.loadSource(streamUrl);
+        hls.loadSource(currentUrl);
         hls.attachMedia(videoRef.current);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           videoRef.current.play().catch(e => console.log('Auto-play prevented:', e));
         });
       } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
         // Fallback for Safari
-        videoRef.current.src = streamUrl;
+        videoRef.current.src = currentUrl;
         videoRef.current.addEventListener('loadedmetadata', () => {
           videoRef.current.play().catch(e => console.log('Auto-play prevented:', e));
         });
@@ -38,7 +41,7 @@ const StreamPage = () => {
         hls.destroy();
       }
     };
-  }, [isLive, streamUrl]);
+  }, [isLive, streamUrl, activeVod]);
 
   useEffect(() => {
     const fetchVods = async () => {
@@ -98,13 +101,17 @@ const StreamPage = () => {
             AXiM Live
           </h1>
           <div className="flex items-center gap-4">
-            {isLive ? (
+            {isLive && !activeVod ? (
               <>
                 <span className="text-xs font-mono text-slate-500">4K STREAM // 60FPS</span>
                 <div className="px-3 py-1 bg-axim-danger/20 text-axim-danger border border-axim-danger/50 rounded-full text-[10px] font-black tracking-widest animate-pulse">
                   LIVE
                 </div>
               </>
+            ) : activeVod ? (
+              <div className="px-3 py-1 bg-axim-accent/20 text-axim-accent border border-axim-accent/50 rounded-full text-[10px] font-black tracking-widest">
+                VOD PLAYBACK
+              </div>
             ) : (
               <div className="px-3 py-1 bg-slate-800 text-slate-400 border border-slate-700 rounded-full text-[10px] font-black tracking-widest">
                 OFFLINE
@@ -115,18 +122,25 @@ const StreamPage = () => {
 
         {/* Primary Video Player */}
         <div className="w-full aspect-video bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden relative group shadow-2xl flex items-center justify-center">
-          {isLive ? (
+          {(isLive || activeVod) ? (
             <>
               {/* In a real app you'd use a video player like video.js or hls.js here to play streamUrl */}
               <video ref={videoRef} autoPlay muted loop controls className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent p-6 flex flex-col justify-end pointer-events-none">
                  <div className="flex items-end justify-between pointer-events-auto">
                     <div>
-                      <h2 className="text-xl font-bold text-white">Chasing the Dryline: Oklahoma Panhandle</h2>
-                      <p className="text-sm text-slate-400 mt-1 flex items-center gap-2">
-                        <SafeIcon icon={FiIcons.FiMapPin} className="text-axim-accent" />
-                        Near Woodward, OK
-                      </p>
+                      <h2 className="text-xl font-bold text-white">{activeVod ? activeVod.title : 'Chasing the Dryline: Oklahoma Panhandle'}</h2>
+                      {!activeVod && (
+                        <p className="text-sm text-slate-400 mt-1 flex items-center gap-2">
+                          <SafeIcon icon={FiIcons.FiMapPin} className="text-axim-accent" />
+                          Near Woodward, OK
+                        </p>
+                      )}
+                      {activeVod && (
+                        <button onClick={() => setActiveVod(null)} className="text-xs text-axim-accent mt-2 hover:underline">
+                          Return to Live Stream
+                        </button>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <button className="p-3 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-md transition-colors">
@@ -155,7 +169,7 @@ const StreamPage = () => {
             </div>
           ) : (
             vodData.map(video => (
-              <div key={video.id} className="glass-panel overflow-hidden group cursor-pointer border-slate-700/30">
+              <div key={video.id} className="glass-panel overflow-hidden group cursor-pointer border-slate-700/30 hover:border-axim-accent/50 transition-colors" onClick={() => setActiveVod(video)}>
                 <div className="aspect-video relative overflow-hidden">
                   <img src={`${video.thumbnail_url || 'https://images.unsplash.com/photo-1605030424683-1463e2645eb4'}?auto=format&fit=crop&q=80&w=600`} alt={video.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">

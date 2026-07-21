@@ -37,6 +37,12 @@ const MapControls = ({ layers, setLayers, activeSpotters }) => {
           icon={FiIcons.FiUsers}
           label="Spotters"
         />
+        <LayerButton
+          active={layers.media}
+          onClick={() => toggleLayer('media')}
+          icon={FiIcons.FiCamera}
+          label="Live Spotter Media"
+        />
       </div>
     </div>
   );

@@ -25,11 +25,11 @@ class ErrorBoundaryInner extends React.Component {
             <div className="w-20 h-20 rounded-full bg-axim-danger/10 flex items-center justify-center mb-6">
               <SafeIcon icon={FiIcons.FiAlertOctagon} className="text-5xl text-axim-danger" />
             </div>
-            <h1 className="text-2xl font-bold text-white mb-2">System Interruption</h1>
+            <h1 className="text-2xl font-bold text-white mb-2">Connection Interrupted - Retrying...</h1>
             <p className="text-slate-400 mb-6 font-mono text-sm">
               A critical failure has occurred in the UI rendering pipeline.
               <br />
-              {this.state.error && <span className="block mt-2 text-axim-danger/80">{this.state.error.toString()}</span>}
+              {/* Hidden raw error trace for production cleanliness */}
             </p>
             <button
               onClick={() => {
