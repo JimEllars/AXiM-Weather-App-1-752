@@ -11,6 +11,7 @@ const Layout = ({ children }) => {
     { id: 'map', path: '/map', icon: FiIcons.FiMap, label: 'Radar' },
     { id: 'submit', path: '/submit', icon: FiIcons.FiCamera, label: 'Report' },
     { id: 'stream', path: '/stream', icon: FiIcons.FiRadio, label: 'Live Hub' },
+    { id: 'forums', path: '/forums', icon: FiIcons.FiMessageSquare, label: 'Forums' },
     { id: 'settings', path: '/settings', icon: FiIcons.FiShield, label: 'Privacy' },
   ];
 

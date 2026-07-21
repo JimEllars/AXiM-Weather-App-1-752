@@ -5,6 +5,7 @@ import MapPage from './pages/MapPage';
 import SubmitPage from './pages/SubmitPage';
 import StreamPage from './pages/StreamPage';
 import SettingsPage from './pages/SettingsPage';
+import ForumsPage from './pages/ForumsPage';
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="/map" element={<MapPage />} />
         <Route path="/submit" element={<SubmitPage />} />
         <Route path="/stream" element={<StreamPage />} />
+        <Route path="/forums" element={<ForumsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>
     </Layout>
