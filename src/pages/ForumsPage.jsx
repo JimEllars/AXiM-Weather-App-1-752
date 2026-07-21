@@ -4,10 +4,12 @@ import SafeIcon from '../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 import { supabase } from '../lib/supabase';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const ForumsPage = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -58,6 +60,7 @@ const ForumsPage = () => {
                 return (
                   <div
                     key={category.id}
+                    onClick={() => navigate(`/forums/${category.id}`)}
                     className="glass-panel p-6 border border-slate-700/50 hover:border-axim-accent/50 transition-colors cursor-pointer group flex items-start gap-4"
                   >
                     <div className="p-4 bg-slate-800/50 rounded-xl group-hover:bg-axim-accent/10 transition-colors">

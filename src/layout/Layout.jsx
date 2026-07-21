@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import SafeIcon from '../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 import BrandLogo from '../components/Common/BrandLogo';
@@ -7,6 +7,7 @@ import { useAxim } from '../context/AximContext';
 
 const Layout = ({ children }) => {
   const { activeSpotters } = useAxim();
+  const navigate = useNavigate();
   const navItems = [
     { id: 'map', path: '/map', icon: FiIcons.FiMap, label: 'Radar' },
     { id: 'submit', path: '/submit', icon: FiIcons.FiCamera, label: 'Report' },
@@ -25,7 +26,7 @@ const Layout = ({ children }) => {
             <span className="text-[10px] text-axim-accent font-bold leading-none">{activeSpotters}</span>
             <span className="text-[8px] text-slate-500 uppercase leading-none">Net</span>
           </div>
-          <button className="p-2 rounded-full bg-slate-800 text-slate-300">
+          <button onClick={() => navigate('/profile')} className="p-2 rounded-full bg-slate-800 text-slate-300 hover:text-white transition-colors">
             <SafeIcon icon={FiIcons.FiUser} />
           </button>
         </div>
@@ -57,8 +58,8 @@ const Layout = ({ children }) => {
         </nav>
 
         <div className="p-4 border-t border-slate-800">
-          <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-800/50">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-axim-accent to-blue-500 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(0,229,255,0.3)]">
+          <div onClick={() => navigate('/profile')} className="flex items-center gap-3 p-2 rounded-xl bg-slate-800/50 hover:bg-slate-700/50 transition-colors cursor-pointer group">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-axim-accent to-blue-500 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(0,229,255,0.3)] group-hover:shadow-[0_0_15px_rgba(0,229,255,0.5)] transition-shadow">
               <SafeIcon icon={FiIcons.FiUser} className="text-white" />
             </div>
             <div className="hidden lg:block overflow-hidden">
