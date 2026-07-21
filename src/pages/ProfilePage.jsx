@@ -33,9 +33,38 @@ const ProfilePage = () => {
       }
 
       setLoading(false);
+
+      // Set up Realtime subscription
+      const channel = supabase
+        .channel('schema-db-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'telemetry_events',
+            filter: `user_id=eq.${uid}`
+          },
+          (payload) => {
+            console.log('Real-time update received:', payload);
+            setSubmissions((prevSubmissions) => {
+              return prevSubmissions.map((sub) =>
+                sub.id === payload.new.id ? { ...sub, ...payload.new } : sub
+              );
+            });
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     };
 
-    fetchProfileData();
+    const cleanup = fetchProfileData();
+    return () => {
+      cleanup.then(fn => fn && fn());
+    };
   }, []);
 
   return (

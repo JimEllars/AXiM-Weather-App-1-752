@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+const fs = require('fs');
+
+let content = `import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import SafeIcon from '../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
@@ -44,7 +46,7 @@ const ForumCategoryView = () => {
       setIsModalOpen(false);
       setNewThreadTitle('');
       setNewThreadContent('');
-      navigate(`/forums/${categoryId}/thread/${data[0].id}`);
+      navigate(\`/forums/\${categoryId}/thread/\${data[0].id}\`);
     }
   };
 
@@ -183,7 +185,7 @@ const ForumCategoryView = () => {
           ) : (
             threads.map((thread) => (
               <div
-                key={thread.id} onClick={() => navigate(`/forums/${categoryId}/thread/${thread.id}`)}
+                key={thread.id} onClick={() => navigate(\`/forums/\${categoryId}/thread/\${thread.id}\`)}
                 className="glass-panel p-4 md:p-6 border border-slate-700/50 hover:border-axim-accent/50 transition-colors cursor-pointer group flex flex-col md:flex-row md:items-center justify-between gap-4"
               >
                 <div className="flex-1">
@@ -217,3 +219,6 @@ const ForumCategoryView = () => {
 };
 
 export default ForumCategoryView;
+`;
+
+fs.writeFileSync('src/pages/ForumCategoryView.jsx', content);
