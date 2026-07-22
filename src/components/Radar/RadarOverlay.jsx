@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Source, Layer } from 'react-map-gl/maplibre';
+import { useRadarFilters } from './radarState';
 
 const RadarOverlay = ({ isVisible, opacity = 0.6 }) => {
   const [frames, setFrames] = useState([]);
+  const { hiddenLevels } = useRadarFilters();
 
   // Preload images in the background
   useEffect(() => {
@@ -46,7 +48,7 @@ const RadarOverlay = ({ isVisible, opacity = 0.6 }) => {
             [-100, 35], [-95, 37], [-90, 35], [-92, 32], [-98, 31], [-100, 35]
           ]]
         },
-        properties: { intensity: 45 }
+        properties: { intensity: 45, label: 'Mod' }
       },
       {
         type: 'Feature',
@@ -56,16 +58,24 @@ const RadarOverlay = ({ isVisible, opacity = 0.6 }) => {
             [-97, 34], [-94, 34], [-94, 32], [-97, 32], [-97, 34]
           ]]
         },
-        properties: { intensity: 65 } // Severe core
+        properties: { intensity: 65, label: 'Severe' } // Severe core
       }
     ]
   };
+
+  const allLabels = ['Light', 'Mod', 'Heavy', 'Severe', 'Hail', 'TVS'];
+  const allowedLabels = allLabels.filter(l => !hiddenLevels.has(l));
+
+  // Create filter expression
+  // if all hidden, ['in', ['get', 'label'], ['literal', []]]
+  const filterExpression = ['in', ['get', 'label'], ['literal', allowedLabels]];
 
   return (
     <Source id="radar-source" type="geojson" data={radarData}>
       <Layer
         id="radar-layer"
         type="fill"
+        filter={filterExpression}
         paint={{
           'fill-color': [
             'interpolate',

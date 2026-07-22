@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 const AximContext = createContext();
@@ -12,6 +12,59 @@ export const AximProvider = ({ children }) => {
   ]);
   const [activeSpotters, setActiveSpotters] = useState(0);
   const [session, setSession] = useState(null);
+  const [isConnectionActive, setIsConnectionActive] = useState(true);
+
+  const [userPreferences, setUserPreferences] = useState(() => {
+    const saved = localStorage.getItem('axim_user_prefs');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse user preferences from localStorage:", e);
+      }
+    }
+    return {
+      muteToastNotifications: false,
+      highContrastRadar: false
+    };
+  });
+
+  const hiddenTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    localStorage.setItem('axim_user_prefs', JSON.stringify(userPreferences));
+  }, [userPreferences]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Start 60 second timer to disconnect
+        hiddenTimeoutRef.current = setTimeout(() => {
+          console.log("Tab hidden for 60s, disabling active connections.");
+          setIsConnectionActive(false);
+        }, 60000);
+      } else {
+        // Tab is visible again
+        if (hiddenTimeoutRef.current) {
+          clearTimeout(hiddenTimeoutRef.current);
+          hiddenTimeoutRef.current = null;
+        }
+        if (!isConnectionActive) {
+          console.log("Tab visible, restoring active connections.");
+          setIsConnectionActive(true);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (hiddenTimeoutRef.current) {
+        clearTimeout(hiddenTimeoutRef.current);
+      }
+    };
+  }, [isConnectionActive]);
 
   useEffect(() => {
     // Initial session load from localStorage
@@ -19,7 +72,7 @@ export const AximProvider = ({ children }) => {
     if (localSession) {
       try {
         setSession(JSON.parse(localSession));
-      } catch(e) {}
+      } catch(e) { console.warn("Failed to parse local session:", e); }
     }
 
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
@@ -72,8 +125,10 @@ export const AximProvider = ({ children }) => {
     privacyMode, setPrivacyMode,
     safeZones, setSafeZones,
     activeSpotters, setActiveSpotters,
-    session
-  }), [isLive, privacyMode, safeZones, activeSpotters, session]);
+    session,
+    isConnectionActive,
+    userPreferences, setUserPreferences
+  }), [isLive, privacyMode, safeZones, activeSpotters, session, isConnectionActive, userPreferences]);
 
   return (
     <AximContext.Provider value={contextValue}>

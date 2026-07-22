@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import SafeIcon from '../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 import { supabase } from '../lib/supabase';
+import { useAxim } from '../context/AximContext';
 
 const ForumThreadView = () => {
   const { categoryId, threadId } = useParams();
@@ -13,6 +14,19 @@ const ForumThreadView = () => {
   const [replyText, setReplyText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [userId, setUserId] = useState(null);
+  const { isConnectionActive } = useAxim();
+
+  const fetchReplies = async () => {
+    const { data: repliesData, error: repliesError } = await supabase
+      .from('forum_replies')
+      .select('*')
+      .eq('thread_id', threadId)
+      .order('created_at', { ascending: true });
+
+    if (!repliesError && repliesData) {
+      setReplies(repliesData);
+    }
+  };
 
   useEffect(() => {
     let subscriptionChannel = null;
@@ -36,18 +50,21 @@ const ForumThreadView = () => {
         setThread(threadData);
       }
 
-      // Fetch replies
-      const { data: repliesData, error: repliesError } = await supabase
-        .from('forum_replies')
-        .select('*')
-        .eq('thread_id', threadId)
-        .order('created_at', { ascending: true });
-
-      if (!repliesError && repliesData) {
-        setReplies(repliesData);
-      }
-
+      await fetchReplies();
       setLoading(false);
+    };
+
+    if (threadId) {
+      fetchThread();
+    }
+  }, [threadId]);
+
+  useEffect(() => {
+    let subscriptionChannel = null;
+
+    if (isConnectionActive && threadId) {
+      // Delta fetch on reconnection
+      fetchReplies();
 
       // Set up Realtime subscription
       subscriptionChannel = supabase
@@ -70,10 +87,6 @@ const ForumThreadView = () => {
           }
         )
         .subscribe();
-    };
-
-    if (threadId) {
-      fetchThread();
     }
 
     return () => {
@@ -81,7 +94,7 @@ const ForumThreadView = () => {
         supabase.removeChannel(subscriptionChannel);
       }
     };
-  }, [threadId]);
+  }, [isConnectionActive, threadId]);
 
   const handleReplySubmit = async (e) => {
     e.preventDefault();
@@ -103,9 +116,6 @@ const ForumThreadView = () => {
         return [...prevReplies, data[0]];
       });
       setReplyText('');
-
-      // Update thread reply count implicitly handled by triggers or manual count,
-      // For now we just increment local state if needed.
     }
     setSubmitting(false);
   };
@@ -165,6 +175,13 @@ const ForumThreadView = () => {
             <SafeIcon icon={FiIcons.FiMessageCircle} className="text-axim-accent" />
             Replies ({replies.length})
           </h2>
+
+          {!isConnectionActive && (
+            <div className="bg-orange-500/10 border border-orange-500/30 text-orange-400 p-3 rounded-lg text-sm flex items-center gap-2">
+              <FiIcons.FiWifiOff className="shrink-0" />
+              Live updates paused to save connection quotas. Will resume when tab is visible.
+            </div>
+          )}
 
           {replies.length === 0 ? (
             <div className="text-center text-slate-500 py-8 border border-dashed border-slate-700/50 rounded-xl">
