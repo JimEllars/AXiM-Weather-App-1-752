@@ -9,6 +9,37 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState(null);
 
+
+  const handleExport = () => {
+    if (submissions.length === 0) return;
+
+    const headers = ['ID', 'Timestamp', 'Latitude', 'Longitude', 'Status', 'Media URL'];
+    const csvRows = [headers.join(',')];
+
+    for (const sub of submissions) {
+      const status = sub.verified ? 'Verified' : sub.rejected ? 'Rejected' : 'Pending';
+      const row = [
+        sub.id,
+        new Date(sub.created_at).toISOString(),
+        sub.lat || '',
+        sub.lng || '',
+        status,
+        sub.media_url || ''
+      ];
+      csvRows.push(row.map(v => `"${v}"`).join(','));
+    }
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'telemetry_history.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   useEffect(() => {
     const fetchProfileData = async () => {
       setLoading(true);
@@ -83,10 +114,20 @@ const ProfilePage = () => {
           </div>
 
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2">
-              <SafeIcon icon={FiIcons.FiDatabase} className="text-axim-accent" />
-              Onyx Mk3 Submissions
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2">
+                <SafeIcon icon={FiIcons.FiDatabase} className="text-axim-accent" />
+                Onyx Mk3 Submissions
+              </h2>
+              <button
+                onClick={handleExport}
+                disabled={submissions.length === 0}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-sm rounded-lg border border-slate-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FiIcons.FiDownload />
+                Export History
+              </button>
+            </div>
 
             <div className="glass-panel overflow-hidden border border-slate-700/50">
               <div className="overflow-x-auto">

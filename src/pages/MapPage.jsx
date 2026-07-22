@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Map, { NavigationControl, Source, Layer, Marker, Popup } from 'react-map-gl/maplibre';
 import { supabase } from '../lib/supabase';
 import { useAxim } from '../context/AximContext';
+import { useNavigate } from 'react-router-dom';
 import MapControls from '../components/Map/MapControls';
 import RadarScrubber from '../components/Radar/RadarScrubber';
 import WeatherLegend from '../components/Radar/WeatherLegend';
@@ -13,6 +14,7 @@ import { logTelemetry } from '../utils/telemetry';
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
 const MapPage = () => {
+  const navigate = useNavigate();
   const mapRef = useRef();
   const { setActiveSpotters } = useAxim();
   // We keep points state only for initial load, but for high-frequency updates, we bypass React state.
@@ -73,6 +75,7 @@ const MapPage = () => {
 
   // WebSocket Subscription with Exponential Backoff
   useEffect(() => {
+    let isMounted = true;
     let retryAttempt = 0;
     const maxRetryDelay = 30000; // 30 seconds
     const baseDelay = 1000; // 1 second
@@ -134,6 +137,7 @@ const MapPage = () => {
 
           // Hydrate
           try {
+            if (!isMounted) return;
             pointsRef.current = {};
             const { data, error } = await supabase
               .from('active_spotters')
@@ -198,6 +202,7 @@ const MapPage = () => {
 
     return () => {
       clearTimeout(reconnectTimeout);
+      isMounted = false;
       clearInterval(uiCountdownInterval);
       if (channel) {
         supabase.removeChannel(channel);
@@ -444,7 +449,7 @@ const MapPage = () => {
         <button
           onClick={() => {
              // Navigating to submit form while keeping coordinates if available
-             window.location.href = "/submit?lat=" + mapRef.current.getCenter().lat + "&lng=" + mapRef.current.getCenter().lng;
+             navigate("/submit?lat=" + mapRef.current.getCenter().lat + "&lng=" + mapRef.current.getCenter().lng);
           }}
           className="w-full py-3 px-6 glass-panel bg-axim-accent/20 hover:bg-axim-accent/40 border border-axim-accent/50 text-white font-bold rounded-full shadow-lg backdrop-blur-md transition-all flex items-center justify-center gap-2"
         >

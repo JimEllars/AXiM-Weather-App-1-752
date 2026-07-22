@@ -23,8 +23,8 @@ function App() {
             <Route path="/submit" element={<SubmitPage />} />
             <Route path="/stream" element={<ErrorBoundary><StreamPage /></ErrorBoundary>} />
             <Route path="/forums" element={<ErrorBoundary><ForumsPage /></ErrorBoundary>} />
-            <Route path="/forums/:categoryId" element={<ProtectedRoute><ForumCategoryView /></ProtectedRoute>} />
-            <Route path="/forums/:categoryId/thread/:threadId" element={<ProtectedRoute><ForumThreadView /></ProtectedRoute>} />
+            <Route path="/forums/:categoryId" element={<ErrorBoundary><ProtectedRoute><ForumCategoryView /></ProtectedRoute></ErrorBoundary>} />
+            <Route path="/forums/:categoryId/thread/:threadId" element={<ErrorBoundary><ProtectedRoute><ForumThreadView /></ProtectedRoute></ErrorBoundary>} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
           </Routes>
