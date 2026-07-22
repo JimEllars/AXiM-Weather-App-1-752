@@ -9,7 +9,6 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState(null);
 
-
   const handleExport = () => {
     if (submissions.length === 0) return;
 
@@ -17,7 +16,14 @@ const ProfilePage = () => {
     const csvRows = [headers.join(',')];
 
     for (const sub of submissions) {
-      const status = sub.verified ? 'Verified' : sub.rejected ? 'Rejected' : 'Pending';
+      let status = 'Pending';
+      if (sub.error_flag || (Date.now() - new Date(sub.created_at).getTime() > 10 * 60 * 1000 && !sub.verified && !sub.rejected)) {
+          status = 'Error/Timeout';
+      } else if (sub.verified) {
+          status = 'Verified';
+      } else if (sub.rejected) {
+          status = 'Rejected';
+      }
       const row = [
         sub.id,
         new Date(sub.created_at).toISOString(),
@@ -98,6 +104,41 @@ const ProfilePage = () => {
     };
   }, []);
 
+  const getStatusBadge = (sub) => {
+    // Check for error flag or 10-minute timeout
+    const isTimeout = (Date.now() - new Date(sub.created_at).getTime()) > 10 * 60 * 1000;
+
+    if (sub.error_flag || (!sub.verified && !sub.rejected && isTimeout)) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+          <FiIcons.FiAlertTriangle /> Validation Timeout / Error
+        </span>
+      );
+    }
+
+    if (sub.verified) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-axim-success/10 text-axim-success border border-axim-success/20">
+          <FiIcons.FiCheckCircle /> Verified
+        </span>
+      );
+    }
+
+    if (sub.rejected) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-axim-danger/10 text-axim-danger border border-axim-danger/20">
+          <FiIcons.FiXCircle /> Rejected
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
+        <FiIcons.FiClock /> Pending
+      </span>
+    );
+  };
+
   return (
     <ProtectedRoute>
       <div className="h-full w-full bg-axim-dark overflow-y-auto p-6 flex justify-center">
@@ -166,19 +207,7 @@ const ProfilePage = () => {
                             ) : '-'}
                           </td>
                           <td className="p-4">
-                            {sub.verified ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-axim-success/10 text-axim-success border border-axim-success/20">
-                                <FiIcons.FiCheckCircle /> Verified
-                              </span>
-                            ) : sub.rejected ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-axim-danger/10 text-axim-danger border border-axim-danger/20">
-                                <FiIcons.FiXCircle /> Rejected
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
-                                <FiIcons.FiClock /> Pending
-                              </span>
-                            )}
+                            {getStatusBadge(sub)}
                           </td>
                         </tr>
                       ))
