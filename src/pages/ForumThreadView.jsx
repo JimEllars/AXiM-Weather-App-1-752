@@ -15,6 +15,8 @@ const ForumThreadView = () => {
   const [userId, setUserId] = useState(null);
 
   useEffect(() => {
+    let subscriptionChannel = null;
+
     const fetchThread = async () => {
       setLoading(true);
 
@@ -46,11 +48,39 @@ const ForumThreadView = () => {
       }
 
       setLoading(false);
+
+      // Set up Realtime subscription
+      subscriptionChannel = supabase
+        .channel(`thread-replies-${threadId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'forum_replies',
+            filter: `thread_id=eq.${threadId}`
+          },
+          (payload) => {
+            console.log('Real-time reply received:', payload);
+            setReplies((prevReplies) => {
+              // Avoid duplicates if the author is the one who submitted and local state was already updated
+              if (prevReplies.some(r => r.id === payload.new.id)) return prevReplies;
+              return [...prevReplies, payload.new];
+            });
+          }
+        )
+        .subscribe();
     };
 
     if (threadId) {
       fetchThread();
     }
+
+    return () => {
+      if (subscriptionChannel) {
+        supabase.removeChannel(subscriptionChannel);
+      }
+    };
   }, [threadId]);
 
   const handleReplySubmit = async (e) => {
@@ -68,7 +98,10 @@ const ForumThreadView = () => {
       .select();
 
     if (!error && data) {
-      setReplies([...replies, data[0]]);
+      setReplies((prevReplies) => {
+        if (prevReplies.some(r => r.id === data[0].id)) return prevReplies;
+        return [...prevReplies, data[0]];
+      });
       setReplyText('');
 
       // Update thread reply count implicitly handled by triggers or manual count,
