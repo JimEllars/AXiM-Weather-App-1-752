@@ -279,7 +279,7 @@ const MapPage = () => {
     }
   };
 
-  const onClick = (event) => {
+  const onClick = useCallback((event) => {
     const feature = event.features[0];
     if (!feature) return;
 
@@ -297,7 +297,7 @@ const MapPage = () => {
         });
       });
     }
-  };
+  }, []);
 
   const handleLocationSelect = (loc) => {
     setSelectedLocation(loc.name);
@@ -355,20 +355,11 @@ const MapPage = () => {
         )}
 
         {layers.media && mediaEvents.map(event => (
-          <Marker
+          <MemoizedMarker
             key={event.id}
-            longitude={event.lng || 0}
-            latitude={event.lat || 0}
-            anchor="bottom"
-            onClick={e => {
-              e.originalEvent.stopPropagation();
-              setSelectedMedia(event);
-            }}
-          >
-            <div className="w-8 h-8 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center cursor-pointer shadow-lg overflow-hidden">
-              {event.media_url ? <img src={event.media_url} alt="media" className="w-full h-full object-cover" /> : <span className="text-xs text-white">Media</span>}
-            </div>
-          </Marker>
+            event={event}
+            onSelect={setSelectedMedia}
+          />
         ))}
 
         {selectedMedia && (
