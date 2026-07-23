@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Map, { NavigationControl, Source, Layer, Marker, Popup } from 'react-map-gl/maplibre';
 import { supabase } from '../lib/supabase';
 import { useAxim } from '../context/AximContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import MapControls from '../components/Map/MapControls';
 import RadarScrubber from '../components/Radar/RadarScrubber';
 import WeatherLegend from '../components/Radar/WeatherLegend';
@@ -16,7 +16,7 @@ const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.j
 const MapPage = () => {
   const navigate = useNavigate();
   const mapRef = useRef();
-  const { setActiveSpotters } = useAxim();
+  const { setActiveSpotters, isLive } = useAxim();
   // We keep points state only for initial load, but for high-frequency updates, we bypass React state.
   const [points, setPoints] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -318,13 +318,23 @@ const MapPage = () => {
       <LocationSearch onLocationSelect={handleLocationSelect} />
 
       {/* Network Status Indicator */}
-      <div className="absolute top-4 right-4 z-10 flex items-center gap-2 glass-panel px-3 py-1.5 rounded-full pointer-events-auto shadow-lg">
-        <div className={`w-2 h-2 rounded-full ${wsStatus === 'CONNECTED' ? 'bg-green-500 animate-pulse' : wsStatus === 'CONNECTING' ? 'bg-yellow-500 animate-pulse' : wsStatus === 'RECONNECTING' || wsStatus === 'ERROR' ? 'bg-orange-500' : 'bg-red-500'}`}></div>
-        <span className="text-xs font-mono font-medium text-slate-300">
-          {wsStatus === 'CONNECTED' && 'LIVE'}
-          {wsStatus === 'CONNECTING' && 'CONNECTING...'}
-          {(wsStatus === 'RECONNECTING' || wsStatus === 'ERROR') && `RETRY IN ${retrySeconds}s`}
-        </span>
+      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 pointer-events-auto">
+        <div className="flex items-center gap-2 glass-panel px-3 py-1.5 rounded-full shadow-lg self-end">
+          <div className={`w-2 h-2 rounded-full ${wsStatus === 'CONNECTED' ? 'bg-green-500 animate-pulse' : wsStatus === 'CONNECTING' ? 'bg-yellow-500 animate-pulse' : wsStatus === 'RECONNECTING' || wsStatus === 'ERROR' ? 'bg-orange-500' : 'bg-red-500'}`}></div>
+          <span className="text-xs font-mono font-medium text-slate-300">
+            {wsStatus === 'CONNECTED' && 'LIVE'}
+            {wsStatus === 'CONNECTING' && 'CONNECTING...'}
+            {(wsStatus === 'RECONNECTING' || wsStatus === 'ERROR') && `RETRY IN ${retrySeconds}s`}
+          </span>
+        </div>
+
+        {isLive && (
+          <Link to="/stream" className="flex items-center gap-2 glass-panel px-3 py-1.5 rounded-full shadow-lg border border-red-500/50 hover:bg-red-500/10 transition-colors group self-end">
+             <div className="w-2 h-2 rounded-full bg-red-500 animate-ping absolute"></div>
+             <div className="w-2 h-2 rounded-full bg-red-500 relative"></div>
+             <span className="text-xs font-bold text-red-400 group-hover:text-red-300">STUDIO LIVE</span>
+          </Link>
+        )}
       </div>
 
       <Map

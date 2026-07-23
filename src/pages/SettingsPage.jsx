@@ -2,9 +2,74 @@ import React from 'react';
 import SafeIcon from '../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 import { useAxim } from '../context/AximContext';
+import { supabase } from '../lib/supabase';
+
 
 const SettingsPage = () => {
-  const { privacyMode, setPrivacyMode, safeZones, userPreferences, setUserPreferences } = useAxim();
+
+  const { privacyMode, setPrivacyMode, safeZones, userPreferences, setUserPreferences, session } = useAxim();
+
+  const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window;
+
+  const urlBase64ToUint8Array = (base64String) => {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  };
+
+  const handlePushToggle = async () => {
+    if (!pushSupported) {
+      alert('Push notifications are not supported in this browser.');
+      return;
+    }
+
+    if (!userPreferences.enablePushAlerts) {
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          alert('Push notification permission denied.');
+          return;
+        }
+
+        const registration = await navigator.serviceWorker.ready;
+        const dummyVapidKey = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYpPNs_zcc';
+
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(dummyVapidKey)
+        });
+
+        if (session?.user?.id) {
+          const { error } = await supabase.from('push_subscriptions').insert({
+            user_id: session.user.id,
+            subscription: subscription.toJSON()
+          });
+
+          if (error) {
+            console.error('Failed to save push subscription:', error);
+            alert('Failed to save subscription to server.');
+            // Could choose to rollback toggle here, but continuing for now
+          }
+        } else {
+          console.warn('No active session. Subscription not saved to Supabase.');
+        }
+
+        handleTogglePreference('enablePushAlerts');
+      } catch (err) {
+        console.error('Error subscribing to push:', err);
+        alert('An error occurred while enabling push notifications.');
+      }
+    } else {
+      handleTogglePreference('enablePushAlerts');
+      // Optionally unsubscribe here, though not explicitly required
+    }
+  };
+
 
   const handleTogglePreference = (key) => {
     setUserPreferences(prev => ({
@@ -33,28 +98,15 @@ const SettingsPage = () => {
               <h3 className="text-lg font-bold">Enable Background Push Alerts</h3>
               <p className="text-sm text-slate-400">Receive critical notifications even when the app is closed.</p>
             </div>
-            <button
-              onClick={() => {
-                if (!userPreferences.enablePushAlerts) {
-                  if ('Notification' in window) {
-                    Notification.requestPermission().then(permission => {
-                      if (permission === 'granted') {
-                        handleTogglePreference('enablePushAlerts');
-                      } else {
-                        alert('Push notification permission denied.');
-                      }
-                    });
-                  } else {
-                    alert('Push notifications are not supported in this browser.');
-                  }
-                } else {
-                   handleTogglePreference('enablePushAlerts');
-                }
-              }}
-              className={`w-14 h-7 rounded-full transition-colors relative ${userPreferences.enablePushAlerts ? 'bg-axim-accent' : 'bg-slate-700'}`}
-            >
-              <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all ${userPreferences.enablePushAlerts ? 'left-8' : 'left-1'}`} />
-            </button>
+            <div className="flex items-center gap-2" title={!pushSupported ? "Push notifications are not supported in your browser" : ""}>
+              <button
+                onClick={handlePushToggle}
+                disabled={!pushSupported}
+                className={`w-14 h-7 rounded-full transition-colors relative ${!pushSupported ? 'opacity-50 cursor-not-allowed bg-slate-800' : userPreferences.enablePushAlerts ? 'bg-axim-accent' : 'bg-slate-700'}`}
+              >
+                <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all ${userPreferences.enablePushAlerts && pushSupported ? 'left-8' : 'left-1'}`} />
+              </button>
+            </div>
           </div>
 
 
