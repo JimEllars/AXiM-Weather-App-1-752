@@ -11,6 +11,7 @@ export const AximProvider = ({ children }) => {
     { id: 2, name: 'Work HQ', radius: '200m', active: false }
   ]);
   const [activeSpotters, setActiveSpotters] = useState(0);
+  const [globalAlerts, setGlobalAlerts] = useState([]);
   const [session, setSession] = useState(null);
   const [isConnectionActive, setIsConnectionActive] = useState(true);
 
@@ -120,15 +121,34 @@ export const AximProvider = ({ children }) => {
     };
   }, []);
 
+
+  useEffect(() => {
+    let subscription;
+    if (isConnectionActive) {
+      subscription = supabase
+        .channel('global_alerts_channel')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'global_alerts' }, (payload) => {
+           setGlobalAlerts(prev => [...prev, payload.new]);
+        })
+        .subscribe();
+    }
+    return () => {
+      if (subscription) {
+        supabase.removeChannel(subscription);
+      }
+    };
+  }, [isConnectionActive]);
+
   const contextValue = useMemo(() => ({
     isLive, setIsLive,
+    globalAlerts, setGlobalAlerts,
     privacyMode, setPrivacyMode,
     safeZones, setSafeZones,
     activeSpotters, setActiveSpotters,
     session,
     isConnectionActive,
     userPreferences, setUserPreferences
-  }), [isLive, privacyMode, safeZones, activeSpotters, session, isConnectionActive, userPreferences]);
+  }), [isLive, globalAlerts, privacyMode, safeZones, activeSpotters, session, isConnectionActive, userPreferences]);
 
   return (
     <AximContext.Provider value={contextValue}>

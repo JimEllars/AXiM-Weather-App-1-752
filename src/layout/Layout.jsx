@@ -5,8 +5,32 @@ import * as FiIcons from 'react-icons/fi';
 import BrandLogo from '../components/Common/BrandLogo';
 import { useAxim } from '../context/AximContext';
 
+
+const ToastAlert = ({ alert, onDismiss }) => {
+  React.useEffect(() => {
+    const timer = setTimeout(onDismiss, 5000);
+    return () => clearTimeout(timer);
+  }, [onDismiss]);
+
+  return (
+    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-md pointer-events-auto animate-in fade-in slide-in-from-top-4 duration-300">
+      <div className="glass-panel p-4 bg-axim-warning/20 border border-axim-warning/50 rounded-xl shadow-lg flex items-start gap-3 backdrop-blur-md">
+        <SafeIcon icon={FiIcons.FiAlertTriangle} className="text-axim-warning text-xl shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <h4 className="text-white font-bold text-sm">{alert.title || 'System Alert'}</h4>
+          <p className="text-slate-300 text-xs mt-1">{alert.message}</p>
+        </div>
+        <button onClick={onDismiss} className="text-slate-400 hover:text-white transition-colors">
+          <SafeIcon icon={FiIcons.FiX} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+
 const Layout = ({ children }) => {
-  const { activeSpotters } = useAxim();
+  const { activeSpotters, globalAlerts, setGlobalAlerts, userPreferences } = useAxim();
   const navigate = useNavigate();
   const navItems = [
     { id: 'map', path: '/map', icon: FiIcons.FiMap, label: 'Radar' },
@@ -74,6 +98,12 @@ const Layout = ({ children }) => {
       </div>
 
       <main className="flex-1 relative overflow-hidden">
+
+      {/* Global Alerts Toast */}
+      {!userPreferences.muteToastNotifications && globalAlerts.map(alert => (
+        <ToastAlert key={alert.id} alert={alert} onDismiss={() => setGlobalAlerts(prev => prev.filter(a => a.id !== alert.id))} />
+      ))}
+
         {children}
       </main>
 
