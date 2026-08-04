@@ -9,6 +9,18 @@ import { useNavigate } from 'react-router-dom';
 const ForumsPage = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -32,6 +44,12 @@ const ForumsPage = () => {
     <ProtectedRoute>
       <div className="h-full w-full bg-axim-dark overflow-y-auto p-6 flex justify-center">
         <div className="w-full max-w-4xl space-y-6">
+          {isOffline && (
+            <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-lg text-sm flex items-center justify-center gap-2 mb-4 font-medium backdrop-blur-md">
+              <FiIcons.FiWifiOff className="shrink-0" />
+              Connection Lost: Live Reporting Disabled (Read-Only Mode)
+            </div>
+          )}
           <div className="flex items-center gap-3 mb-8">
             <SafeIcon icon={FiIcons.FiMessageSquare} className="text-3xl text-axim-accent" />
             <h1 className="text-3xl font-bold text-white">Member Forums</h1>

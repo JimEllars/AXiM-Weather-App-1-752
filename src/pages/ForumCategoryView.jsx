@@ -5,6 +5,18 @@ import * as FiIcons from 'react-icons/fi';
 import { supabase } from '../lib/supabase';
 
 const ForumCategoryView = () => {
+
+  const isThreadUnread = (thread) => {
+    try {
+      const readStates = JSON.parse(localStorage.getItem('axim_forum_read_states') || '{}');
+      const lastRead = readStates[thread.id];
+      const updatedStr = thread.updated_at || thread.created_at;
+      if (!lastRead) return true; // Never read
+      if (new Date(updatedStr).getTime() > new Date(lastRead).getTime()) return true; // Updated since last read
+    } catch (e) { return false; }
+    return false;
+  };
+
   const { categoryId } = useParams();
   const navigate = useNavigate();
   const [threads, setThreads] = useState([]);
@@ -187,7 +199,12 @@ const ForumCategoryView = () => {
                 className="glass-panel p-4 md:p-6 border border-slate-700/50 hover:border-axim-accent/50 transition-colors cursor-pointer group flex flex-col md:flex-row md:items-center justify-between gap-4"
               >
                 <div className="flex-1">
-                  <h2 className="text-lg font-semibold text-slate-200 group-hover:text-white transition-colors">{thread.title}</h2>
+                  <div className="flex items-center gap-2">
+                    {isThreadUnread(thread) && (
+                      <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6] animate-pulse shrink-0" title="New Activity"></div>
+                    )}
+                    <h2 className="text-lg font-semibold text-slate-200 group-hover:text-white transition-colors">{thread.title}</h2>
+                  </div>
                   <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
                     <span className="flex items-center gap-1">
                       <FiIcons.FiUser />

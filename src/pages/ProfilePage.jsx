@@ -155,7 +155,23 @@ const ProfilePage = () => {
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            {/* Operative Efficacy Metrics */}
+          <div className="glass-panel p-6 border border-slate-700/50 rounded-xl mb-8">
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Verification Rate</h3>
+            {(() => {
+                const total = submissions.length;
+                const verified = submissions.filter(s => s.verified).length;
+                const rate = total > 0 ? Math.round((verified / total) * 100) : 0;
+                return (
+                  <div className="flex items-end gap-4">
+                     <div className="text-5xl font-mono font-black text-axim-accent">{rate}%</div>
+                     <div className="text-sm text-slate-500 mb-1">{verified} / {total} AI Validated</div>
+                  </div>
+                )
+            })()}
+          </div>
+
+          <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2">
                 <SafeIcon icon={FiIcons.FiDatabase} className="text-axim-accent" />
                 Onyx Mk3 Submissions
@@ -193,8 +209,15 @@ const ProfilePage = () => {
                     ) : (
                       submissions.map((sub) => (
                         <tr key={sub.id} className="hover:bg-slate-800/30 transition-colors">
-                          <td className="p-4 text-slate-300 whitespace-nowrap">
-                            {new Date(sub.created_at).toLocaleString()}
+                          <td className="p-4 whitespace-nowrap">
+                            <div className="text-slate-300">
+                              {new Date(sub.created_at).toLocaleString()}
+                            </div>
+                            {sub.verified && sub.summary && (
+                              <div className="text-[10px] text-slate-400 mt-1 italic whitespace-normal max-w-[200px] line-clamp-2">
+                                "{sub.summary}"
+                              </div>
+                            )}
                           </td>
                           <td className="p-4 text-slate-300 font-mono text-xs">
                             {sub.lat ? `${sub.lat.toFixed(4)}, ${sub.lng?.toFixed(4)}` : 'Unknown'}

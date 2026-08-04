@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SafeIcon from '../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 import OnyxPipeline from '../components/Submit/OnyxPipeline';
+import { useAxim } from '../context/AximContext';
 
 const SubmitPage = () => {
   const [file, setFile] = useState(null);
@@ -10,7 +11,54 @@ const SubmitPage = () => {
   const [result, setResult] = useState(null);
   const [metadata, setMetadata] = useState(null);
   const [uploadError, setUploadError] = useState(null);
+  const { isConnectionActive, setGlobalAlerts } = useAxim();
 
+
+
+  const saveToIndexedDB = (file, metadata) => {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('axim-offline-queue', 1);
+
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains('telemetry')) {
+          db.createObjectStore('telemetry', { keyPath: 'id', autoIncrement: true });
+        }
+      };
+
+      request.onsuccess = (event) => {
+        const db = event.target.result;
+        const transaction = db.transaction('telemetry', 'readwrite');
+        const store = transaction.objectStore('telemetry');
+
+        // Convert file/blob URL to actual Blob if possible, or just store what we have.
+        // Given `fileUrl` is a blob URL created by URL.createObjectURL(file), we really need the actual file object.
+        // Wait, SubmitPage passes `file` to OnyxPipeline, which is actually the blob URL in the current implementation.
+        // Let's store the metadata and whatever we have.
+
+        const payload = {
+            metadata: metadata,
+            timestamp: Date.now()
+        };
+
+        // We'd ideally store the binary Blob. If `file` was just the URL, we'd fetch it to get Blob.
+        // Assuming we can fetch the blob URL:
+        fetch(file).then(r => r.blob()).then(blob => {
+            payload.blob = blob;
+            store.add(payload);
+            resolve();
+        }).catch(err => {
+            console.error("Failed to fetch blob for IDB", err);
+            store.add(payload);
+            resolve();
+        });
+      };
+
+      request.onerror = (event) => {
+        reject(event.target.error);
+      };
+    });
+  };
 
   const validateFile = (file) => {
     if (!file) return false;

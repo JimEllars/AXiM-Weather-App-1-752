@@ -5,11 +5,11 @@ import LiveChat from '../components/Stream/LiveChat';
 import { supabase } from '../lib/supabase';
 import Hls from 'hls.js';
 import { useRef } from 'react';
+import { useAxim } from '../context/AximContext';
 
 const StreamPage = () => {
   const [vodData, setVodData] = useState([]);
-  const [isLive, setIsLive] = useState(false);
-  const [streamUrl, setStreamUrl] = useState('');
+  const { isLive, streamUrl } = useAxim();
   const [activeVod, setActiveVod] = useState(null);
   const videoRef = useRef(null);
 
@@ -59,36 +59,7 @@ const StreamPage = () => {
 
     fetchVods();
 
-    // Fetch initial app_settings
-    const fetchSettings = async () => {
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('*')
-        .eq('id', 1) // Assuming single row or similar
-        .single();
 
-      if (data) {
-        setIsLive(data.is_live);
-        setStreamUrl(data.stream_url);
-      }
-    };
-    fetchSettings();
-
-    // Subscribe to realtime changes on app_settings
-    const channel = supabase.channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'app_settings' },
-        (payload) => {
-          setIsLive(payload.new.is_live);
-          setStreamUrl(payload.new.stream_url);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
 
   return (

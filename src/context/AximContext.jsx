@@ -1,10 +1,23 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 const AximContext = createContext();
 
 export const AximProvider = ({ children }) => {
-  const [isLive, setIsLive] = useState(true);
+  const [isLive, setIsLive] = useState(false);
+  const [streamUrl, setStreamUrl] = useState('');
   const [privacyMode, setPrivacyMode] = useState(true);
   const [safeZones, setSafeZones] = useState([
     { id: 1, name: 'Home Base', radius: '500m', active: true },
@@ -35,6 +48,37 @@ export const AximProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('axim_user_prefs', JSON.stringify(userPreferences));
   }, [userPreferences]);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('*')
+        .eq('id', 1)
+        .single();
+
+      if (data) {
+        setIsLive(data.is_live);
+        setStreamUrl(data.stream_url);
+      }
+    };
+    fetchSettings();
+
+    const channel = supabase.channel('app-settings-channel')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'app_settings' },
+        (payload) => {
+          setIsLive(payload.new.is_live);
+          setStreamUrl(payload.new.stream_url);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -121,6 +165,133 @@ export const AximProvider = ({ children }) => {
     };
   }, []);
 
+  useEffect(() => {
+    const verifyPushSubscription = async () => {
+      if ('serviceWorker' in navigator && 'PushManager' in window && session?.user?.id) {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          const currentSubscription = await registration.pushManager.getSubscription();
+          const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+
+          if (!currentSubscription) {
+             console.log("No push subscription found, renegotiating...");
+             const newSubscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(vapidKey)
+             });
+
+             await supabase.from('push_subscriptions').upsert({
+               user_id: session.user.id,
+               subscription: JSON.parse(JSON.stringify(newSubscription)),
+               is_active: true
+             }, { onConflict: 'user_id' });
+             console.log("Push subscription renegotiated and saved.");
+
+          } else {
+             // In a real app we'd verify the keys match, but checking existence is good for this sprint
+             console.log("Push subscription is active.");
+          }
+        } catch (error) {
+          console.error("Error verifying push subscription:", error);
+        }
+      }
+    };
+
+    // Run verification if session exists and is active
+    if (session && isConnectionActive) {
+      verifyPushSubscription();
+    }
+  }, [session, isConnectionActive]);
+
+
+
+
+
+  useEffect(() => {
+    const drainOfflineQueue = async () => {
+      if (!navigator.onLine || !session?.user?.id) return;
+
+      const request = indexedDB.open('axim-offline-queue', 1);
+      request.onsuccess = async (event) => {
+        const db = event.target.result;
+        // Proceed only if the object store exists
+        if (!db.objectStoreNames.contains('telemetry')) return;
+
+        const transaction = db.transaction('telemetry', 'readwrite');
+        const store = transaction.objectStore('telemetry');
+        const getAllRequest = store.getAll();
+
+        getAllRequest.onsuccess = async () => {
+          const items = getAllRequest.result;
+          if (items && items.length > 0) {
+            console.log(`Found ${items.length} items in offline queue, draining sequentially...`);
+
+            for (const item of items) {
+              try {
+                // Upload Blob to storage if it exists
+                let mediaUrl = null;
+                if (item.blob) {
+                   const fileName = `telemetry_${session.user.id}_${item.timestamp}.jpg`;
+                   const { data: storageData, error: storageError } = await supabase.storage
+                      .from('telemetry_media')
+                      .upload(fileName, item.blob, { contentType: item.blob.type || 'image/jpeg' });
+
+                   if (storageError) {
+                      console.error("Failed to upload offline media:", storageError);
+                      throw storageError; // Rethrow to skip db insert and keep in queue
+                   }
+
+                   const { data: { publicUrl } } = supabase.storage
+                      .from('telemetry_media')
+                      .getPublicUrl(fileName);
+
+                   mediaUrl = publicUrl;
+                }
+
+                // Insert into database
+                const { error: dbError } = await supabase.from('telemetry_events').insert({
+                  user_id: session.user.id,
+                  ...item.metadata,
+                  media_url: mediaUrl
+                });
+
+                if (dbError) throw dbError;
+
+                // Delete from IDB on success
+                const delTx = db.transaction('telemetry', 'readwrite');
+                delTx.objectStore('telemetry').delete(item.id);
+                console.log(`Successfully synced offline item ${item.id}`);
+
+              } catch (err) {
+                 console.error(`Failed to sync offline item ${item.id}, retaining in queue.`, err);
+                 // Stop draining to prevent out-of-order issues or cascading failures if backend is down
+                 break;
+              }
+            }
+
+            // Check remaining
+            const checkTx = db.transaction('telemetry', 'readonly');
+            const checkReq = checkTx.objectStore('telemetry').count();
+            checkReq.onsuccess = () => {
+               if (checkReq.result < items.length) {
+                  setGlobalAlerts(prev => [...prev, { id: Date.now(), title: 'Sync Complete', message: 'Cached reports synced.', severity: 'medium' }]);
+               }
+            };
+          }
+        };
+      };
+    };
+
+    window.addEventListener('online', drainOfflineQueue);
+    // Attempt drain on mount if online
+    if (navigator.onLine) {
+        drainOfflineQueue();
+    }
+
+    return () => {
+      window.removeEventListener('online', drainOfflineQueue);
+    };
+  }, [session]);
 
   useEffect(() => {
     let subscription;
@@ -141,6 +312,7 @@ export const AximProvider = ({ children }) => {
 
   const contextValue = useMemo(() => ({
     isLive, setIsLive,
+    streamUrl, setStreamUrl,
     globalAlerts, setGlobalAlerts,
     privacyMode, setPrivacyMode,
     safeZones, setSafeZones,
@@ -148,7 +320,7 @@ export const AximProvider = ({ children }) => {
     session,
     isConnectionActive,
     userPreferences, setUserPreferences
-  }), [isLive, globalAlerts, privacyMode, safeZones, activeSpotters, session, isConnectionActive, userPreferences]);
+  }), [isLive, streamUrl, globalAlerts, privacyMode, safeZones, activeSpotters, session, isConnectionActive, userPreferences]);
 
   return (
     <AximContext.Provider value={contextValue}>

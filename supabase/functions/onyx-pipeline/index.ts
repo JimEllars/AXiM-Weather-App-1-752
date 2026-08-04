@@ -16,11 +16,13 @@ async function fetchWithRetry(url: string, options: any, maxRetries = 3) {
       }
       return response;
     } catch (error) {
+      if (error.name === 'AbortError') {
+        throw error;
+      }
       attempt++;
       if (attempt >= maxRetries) {
         throw error;
       }
-      // Exponential backoff
       const delay = Math.pow(2, attempt) * 500;
       console.log(`Fetch failed. Retrying in ${delay}ms... (Attempt ${attempt} of ${maxRetries})`);
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -43,35 +45,66 @@ serve(async (req) => {
 
     console.log(`Processing telemetry event ${eventId} with media: ${mediaUrl}`);
 
-    // Actual AI Vision Fetch Call
     console.log("Initiating AI Vision analysis...");
 
     let isVerified = false;
     let severity = "needs_manual_review";
     let status = "needs_manual_review";
+    let summary = null;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
     try {
-      const aiResponse = await fetchWithRetry('https://api.external-ai-vision.com/analyze', {
+      const accountId = Deno.env.get("CF_ACCOUNT_ID") || "YOUR_ACCOUNT_ID";
+      const aiUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`;
+
+      const aiResponse = await fetchWithRetry(aiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('VISION_API_KEY') || 'mock-key'}`
+          'Authorization': `Bearer ${Deno.env.get('CF_AI_API_TOKEN')}`
         },
-        body: JSON.stringify({ image_url: mediaUrl })
+        body: JSON.stringify({
+          prompt: "Analyze this image and assess the severity of the weather event. You must strictly output a raw JSON object with exactly three keys: 'verified' (boolean, true if severe weather is clearly visible), 'severity' (string, one of 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL', or 'NEEDS_MANUAL_REVIEW'), and 'summary' (string, a brief 1-2 sentence human-readable damage or threat assessment). Do not output markdown, just the JSON.",
+          image: [],
+          messages: [
+            {
+              role: "user",
+              content: `Analyze this image: ${mediaUrl}. Assess the severity of the weather event. You must strictly output a raw JSON object with exactly three keys: 'verified' (boolean, true if severe weather is clearly visible), 'severity' (string, one of 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL', or 'NEEDS_MANUAL_REVIEW'), and 'summary' (string, a brief 1-2 sentence human-readable damage or threat assessment). Do not output markdown, just the JSON.`
+            }
+          ]
+        }),
+        signal: controller.signal
       });
 
-      // In a real scenario we parse aiResult, for this sprint we simulate a successful robust response
-      // const aiResult = await aiResponse.json();
-      // isVerified = aiResult.verified;
-      // severity = aiResult.severity;
+      clearTimeout(timeout);
 
-      // Simulating parsed response
-      isVerified = true;
-      severity = "CRITICAL";
-      status = "verified";
+      const aiResult = await aiResponse.json();
+
+      if (aiResult.result && aiResult.result.response) {
+          try {
+              let responseText = aiResult.result.response.trim();
+              if (responseText.startsWith("```json")) {
+                  responseText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+              }
+              const parsedResponse = JSON.parse(responseText);
+              isVerified = parsedResponse.verified || false;
+              severity = parsedResponse.severity || 'needs_manual_review';
+              summary = parsedResponse.summary || null;
+              status = isVerified ? 'verified' : 'needs_manual_review';
+          } catch(parseError) {
+              console.error("Failed to parse AI response JSON:", parseError);
+          }
+      }
+
     } catch (fetchError) {
-       console.error("AI Vision analysis failed after retries:", fetchError);
-       // Fallback mutation logic on fetch failure
+       clearTimeout(timeout);
+       if (fetchError.name === 'AbortError') {
+           console.error("AI Vision analysis timed out after 15 seconds.");
+       } else {
+           console.error("AI Vision analysis failed after retries:", fetchError);
+       }
        isVerified = false;
        severity = "needs_manual_review";
        status = "needs_manual_review";
@@ -79,9 +112,14 @@ serve(async (req) => {
 
     console.log(`Updating telemetry event status to: ${status}`);
 
+    const updatePayload: any = { verified: isVerified, severity: severity, status: status };
+    // Assuming summary is a column, or metadata depending on schema.
+    // If column doesn't exist yet, we could put it in a metadata jsonb, but we'll try to set it directly for the prompt's request.
+    if (summary) updatePayload.summary = summary;
+
     const { error: updateError } = await supabase
       .from('telemetry_events')
-      .update({ verified: isVerified, severity: severity, status: status })
+      .update(updatePayload)
       .eq('id', eventId);
 
     if (updateError) {
@@ -91,14 +129,12 @@ serve(async (req) => {
 
     console.log(`Telemetry event ${eventId} successfully processed.`);
 
-    // Always return 200 OK to prevent webhook dead-letter drops
     return new Response(
-      JSON.stringify({ success: true, message: "Onyx pipeline processing completed", eventId, verified: isVerified, severity, status }),
+      JSON.stringify({ success: true, message: "Onyx pipeline processing completed", eventId, verified: isVerified, severity, status, summary }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Pipeline error:", error);
-    // Return 200 OK even on catchall error to prevent webhook drops, but indicate failure in body
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       { status: 200, headers: { "Content-Type": "application/json" } }

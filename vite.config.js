@@ -8,28 +8,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/api\.mapbox\.com\/v4\/.*/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'mapbox-tiles',
-              expiration: {
-                maxEntries: 1000,
-                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          },
-          {
-            urlPattern: ({ url }) => url.origin.includes('supabase.co') || (url.origin.includes('mapbox.com') && !url.pathname.startsWith('/v4/')),
-            handler: 'NetworkOnly', // Do not cache API calls
-          }
-        ],
+      strategies: 'injectManifest',
+      srcDir: 'public',
+      filename: 'sw.js',
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}']
       },
       manifest: {
         name: 'AXiM Weather',
