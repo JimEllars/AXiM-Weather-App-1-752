@@ -32,6 +32,7 @@ const ToastAlert = ({ alert, onDismiss }) => {
 const Layout = ({ children }) => {
   const { activeSpotters, globalAlerts, setGlobalAlerts, userPreferences } = useAxim();
   const navigate = useNavigate();
+  const [isAlertsDrawerOpen, setIsAlertsDrawerOpen] = React.useState(false);
   const navItems = [
     { id: 'map', path: '/map', icon: FiIcons.FiMap, label: 'Radar' },
     { id: 'submit', path: '/submit', icon: FiIcons.FiCamera, label: 'Report' },
@@ -81,7 +82,22 @@ const Layout = ({ children }) => {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-800 space-y-4">
+
+          {/* Threat Condition UI */}
+          <div className="px-3 py-2 rounded-xl bg-slate-800/30 hover:bg-slate-800/50 border border-slate-700/50 hover:border-slate-600 cursor-pointer transition-colors flex flex-col gap-1" onClick={() => setIsAlertsDrawerOpen(true)}>
+            <span className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Threat Condition</span>
+            {(() => {
+                const highSeverityCount = globalAlerts.filter(a => a.severity === 'high' || a.severity === 'critical').length;
+                if (highSeverityCount > 2) {
+                   return <div className="text-red-400 text-xs font-bold flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>RED (ELEVATED)</div>;
+                } else if (highSeverityCount > 0) {
+                   return <div className="text-yellow-400 text-xs font-bold flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>YELLOW (CAUTION)</div>;
+                }
+                return <div className="text-green-400 text-xs font-bold flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-green-500"></div>GREEN (NOMINAL)</div>;
+            })()}
+          </div>
+
           <div onClick={() => navigate('/profile')} className="flex items-center gap-3 p-2 rounded-xl bg-slate-800/50 hover:bg-slate-700/50 transition-colors cursor-pointer group">
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-axim-accent to-blue-500 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(0,229,255,0.3)] group-hover:shadow-[0_0_15px_rgba(0,229,255,0.5)] transition-shadow">
               <SafeIcon icon={FiIcons.FiUser} className="text-white" />
@@ -105,6 +121,46 @@ const Layout = ({ children }) => {
       ))}
 
         {children}
+
+
+      {/* Global Alerts Archive Drawer */}
+      {isAlertsDrawerOpen && (
+        <div className="absolute inset-0 z-[110] flex justify-end overflow-hidden pointer-events-auto">
+           {/* Backdrop */}
+           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsAlertsDrawerOpen(false)}></div>
+
+           {/* Drawer Panel */}
+           <div className="relative w-full max-w-sm h-full bg-axim-panel border-l border-slate-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+             <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/50">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <SafeIcon icon={FiIcons.FiShield} className="text-axim-accent" />
+                  Threat Intelligence
+                </h3>
+                <button onClick={() => setIsAlertsDrawerOpen(false)} className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors">
+                  <SafeIcon icon={FiIcons.FiX} />
+                </button>
+             </div>
+             <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {globalAlerts.length === 0 ? (
+                   <div className="text-center text-slate-500 py-10">No recent alerts recorded.</div>
+                ) : (
+                   globalAlerts.slice().reverse().slice(0, 10).map((alert, idx) => (
+                     <div key={alert.id || idx} className="glass-panel p-4 rounded-xl border border-slate-700/50 relative overflow-hidden">
+                       <div className={`absolute top-0 left-0 w-1 h-full ${alert.severity === 'critical' ? 'bg-red-500' : alert.severity === 'high' ? 'bg-orange-500' : alert.severity === 'medium' ? 'bg-yellow-500' : 'bg-slate-500'}`}></div>
+                       <div className="flex justify-between items-start mb-2">
+                         <span className={`text-xs font-bold uppercase tracking-wider ${alert.severity === 'critical' ? 'text-red-400' : alert.severity === 'high' ? 'text-orange-400' : alert.severity === 'medium' ? 'text-yellow-400' : 'text-slate-400'}`}>{alert.severity || 'Update'}</span>
+                         <span className="text-[10px] text-slate-500 font-mono">{new Date(alert.created_at || Date.now()).toLocaleTimeString()}</span>
+                       </div>
+                       <h4 className="text-white text-sm font-semibold mb-1">{alert.title || 'System Message'}</h4>
+                       <p className="text-slate-300 text-xs leading-relaxed">{alert.message || alert.content}</p>
+                     </div>
+                   ))
+                )}
+             </div>
+           </div>
+        </div>
+      )}
+
       </main>
 
       {/* Mobile Bottom Nav */}

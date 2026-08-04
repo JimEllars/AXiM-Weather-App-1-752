@@ -381,11 +381,47 @@ const MapPage = () => {
             className="z-50"
           >
             <div className="bg-axim-dark p-3 rounded-lg border border-slate-700 max-w-[250px] shadow-2xl">
-              {selectedMedia.media_url && <img src={selectedMedia.media_url} className="w-full rounded mb-2 object-cover max-h-48" alt="Spotter Media" />}
+              {selectedMedia.media_url && (
+                <div className="relative w-full max-h-48 mb-2 rounded overflow-hidden bg-slate-800/50">
+                  <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-slate-700/50 to-transparent"></div>
+                  <img
+                    src={(() => {
+                      try {
+                        const parsed = new URL(selectedMedia.media_url);
+                        if (parsed.protocol.startsWith('http')) {
+                            return `${parsed.origin}/cdn-cgi/image/width=150,quality=75${parsed.pathname}${parsed.search}`;
+                        }
+                      } catch (e) {}
+                      return selectedMedia.media_url;
+                    })()}
+                    className="w-full h-full object-cover relative z-10"
+                    alt="Spotter Media"
+                    loading="lazy"
+                    onLoad={(e) => { e.target.previousSibling.style.display = 'none'; }}
+                  />
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-white text-sm font-bold">{selectedMedia.type || 'Media Update'}</p>
-                  <p className="text-slate-400 text-[10px] uppercase tracking-wider">Verified Upload</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-white text-sm font-bold">{selectedMedia.type || 'Media Update'}</p>
+                    {selectedMedia.severity && (
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold tracking-wider uppercase ${
+                        selectedMedia.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-400 border-red-500/50' :
+                        selectedMedia.severity === 'HIGH' ? 'bg-orange-500/20 text-orange-400 border-orange-500/50' :
+                        selectedMedia.severity === 'MEDIUM' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50' :
+                        'bg-slate-500/20 text-slate-400 border-slate-500/50'
+                      }`}>
+                        {selectedMedia.severity}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-slate-400 text-[10px] uppercase tracking-wider mt-1">Onyx Mk3 Verified</p>
+                  {selectedMedia.summary && (
+                    <p className="text-slate-300 text-xs mt-2 italic border-l-2 border-axim-accent pl-2 py-0.5">
+                      "{selectedMedia.summary}"
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-1">
                   <button

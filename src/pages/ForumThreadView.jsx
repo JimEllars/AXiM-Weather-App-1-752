@@ -14,6 +14,18 @@ const ForumThreadView = () => {
   const [replyText, setReplyText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [userId, setUserId] = useState(null);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
   const { isConnectionActive } = useAxim();
 
   const fetchReplies = async () => {
@@ -46,9 +58,17 @@ const ForumThreadView = () => {
         .eq('id', threadId)
         .single();
 
+
       if (!threadError && threadData) {
         setThread(threadData);
+        // Mark as read
+        try {
+          const readStates = JSON.parse(localStorage.getItem('axim_forum_read_states') || '{}');
+          readStates[threadId] = new Date().toISOString();
+          localStorage.setItem('axim_forum_read_states', JSON.stringify(readStates));
+        } catch (e) { console.error("Failed to set read state"); }
       }
+
 
       await fetchReplies();
       setLoading(false);
@@ -144,6 +164,12 @@ const ForumThreadView = () => {
   return (
     <div className="h-full w-full bg-axim-dark overflow-y-auto p-4 md:p-6 flex justify-center">
       <div className="w-full max-w-4xl space-y-6">
+        {isOffline && (
+          <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-lg text-sm flex items-center justify-center gap-2 mb-4 font-medium backdrop-blur-md">
+            <FiIcons.FiWifiOff className="shrink-0" />
+            Connection Lost: Live Reporting Disabled (Read-Only Mode)
+          </div>
+        )}
 
         <button
           onClick={() => navigate(`/forums/${categoryId}`)}
@@ -218,6 +244,7 @@ const ForumThreadView = () => {
             <h3 className="text-lg font-medium text-white mb-4">Transmit Reply</h3>
             <form onSubmit={handleReplySubmit}>
               <textarea
+                disabled={isOffline}
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 placeholder="Enter analysis or commentary..."
@@ -227,7 +254,7 @@ const ForumThreadView = () => {
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  disabled={submitting || !replyText.trim()}
+                  disabled={submitting || !replyText.trim() || isOffline}
                   className="px-6 py-2 bg-axim-accent text-axim-dark font-semibold rounded-lg hover:bg-axim-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {submitting ? (
